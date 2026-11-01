@@ -3,15 +3,18 @@ import { avatarSVG, AV_OPTIONS, AV_LABELS, DEFAULT_AVATAR, randomAvatar } from '
 import { hanaSay, bitSay, hanaRandom, bitRandom } from './voice.js';
 import { learnLesson, recordAnswer, dueCount, buildReview, memoryScore } from './srs.js';
 import { showReview } from './review.js';
+import { startCall, callActive } from './call.js';
+import { englishVoices, hanaVoice, voicesReady, canListen } from './speech.js';
+import { onSpeaking, HANA_PITCH } from './voice.js';
 import { mascot, bitIcon } from './mascot.js';
 import { badge, icon, thumb, medal, sun, plant, col } from './art.js';
 import { S, save, reset, addXP, addTime, streakAlive, today, dayOffset, esc, sfx, burst, countUp, toast } from './store.js';
-import { startLesson } from './lesson.js';
-import { startGame } from './game.js';
+import { startLesson, lessonActive } from './lesson.js';
+import { startGame, gameActive } from './game.js';
 
 const $app = document.getElementById('app');
 let openCourse = null;
-let lastKey = '';
+let lastKey = ''; let lastTab = 0;
 let period = 'week';
 let openAvatar = false; let avTab = 'hair'; let draftAv = null; let lastGame = null;
 const myAvatar = (size) => avatarSVG(S.avatar || DEFAULT_AVATAR, size);
@@ -45,16 +48,20 @@ function render() {
   if (!S.onboarded) return renderOnboarding();
   if (openAvatar) return renderAvatarBuilder();
   const key = openCourse ? `course:${openCourse}` : `tab:${S.tab}`;
+  const ti = TABS.findIndex((t) => t[0] === S.tab);
+  const anim = key === lastKey ? '' : openCourse ? 'push-in' : lastKey.startsWith('course:') ? 'pop-in-screen' : ti > lastTab ? 'slide-l' : ti < lastTab ? 'slide-r' : 'screen-in';
+  lastTab = ti;
   const screens = { home: homeScreen, explore: exploreScreen, progress: progressScreen, profile: profileScreen };
   const body = openCourse ? courseScreen(COURSES[openCourse]) : (screens[S.tab] || homeScreen)();
   $app.innerHTML = `<div class="shell">
-    <main class="main ${key !== lastKey ? 'screen-in' : ''} ${openCourse ? 'no-nav' : ''}" id="main">${body}</main>
-    ${openCourse ? '' : `<nav class="tabbar" aria-label="Main">${TABS.map(([id, label, d]) => `<button class="tab ${S.tab === id ? 'on' : ''}" data-tab="${id}">
+    <main class="main ${anim} ${openCourse ? 'no-nav' : ''}" id="main">${body}</main>
+    ${openCourse ? '' : `<nav class="tabbar" aria-label="Main" style="--x:${ti}"><span class="tab-pill"></span>${TABS.map(([id, label, d]) => `<button class="tab ${S.tab === id ? 'on' : ''}" data-tab="${id}">
       <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="${d}" fill="${id === 'home' && S.tab === id ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><small>${label}</small></button>`).join('')}</nav>`}
   </div>`;
   if (key !== lastKey) document.getElementById('main').scrollTop = 0;
   lastKey = key;
   countUp($app);
+  armReveal();
 }
 
 /* ================= Onboarding ================= */
@@ -99,10 +106,12 @@ function homeScreen() {
   const picks = [suggest.find((c) => c.cat === 'school'), suggest.find((c) => c.cat === 'language'), suggest.find((c) => c.cat === 'chess') || suggest.filter((c) => c.cat === 'school')[1]].filter(Boolean);
   const habits = S.habits;
   return `<div class="home">
+    <div class="aurora" aria-hidden="true"><i></i><i></i><i></i><span class="sparks">${'<b></b>'.repeat(10)}</span></div>
     <header class="home-head">
       <div><p class="hello">${greeting()}${S.name ? ` ${esc(S.name)}` : ''}</p><h1 class="headline">${streak ? 'Keep going!' : 'Let\'s begin!'} ${sun(36)}</h1>
         <p class="lead">A little progress each day leads to big results.</p></div>
-      <button class="avatar-btn" data-tab="profile" aria-label="Your profile">${myAvatar(60)}</button>
+      <div class="head-btns"><button class="call-btn" data-act="call" aria-label="Call Hana"><span class="pulse"></span>📞</button>
+        <button class="avatar-btn" data-tab="profile" aria-label="Your profile">${myAvatar(60)}</button></div>
     </header>
 
     <section class="streak-card rise" style="--i:1">
@@ -112,7 +121,14 @@ function homeScreen() {
       <p>${streak > 1 ? `Awesome! You've been learning for ${streak} days in a row.` : streak === 1 ? 'Great start! Come back tomorrow to grow your streak.' : 'Finish a lesson today to start your streak.'}</p>
     </section>
 
-    <section class="hana-card rise" style="--i:1">${mascot('happy', 92)}<div class="hc-bubble"><b>Hana</b><p>${esc(hanaLine())}</p><small>Tap me or Bit to chat</small></div></section>
+    <section class="hana-card rise" style="--i:1">${mascot('happy', 92)}<div class="hc-bubble"><b>Hana</b><p>${esc(hanaLine())}</p>
+      <button class="hc-call" data-act="call"><span>📞</span> Call me. I'll teach you anything</button></div></section>
+    <div class="quick rise" style="--i:1">
+      <button data-act="call"><span>📞</span>Call Hana</button>
+      <button data-act="revise"><span>🧠</span>Revise</button>
+      <button data-open="chess"><span>♞</span>Chess</button>
+      <button data-tab="explore"><span>🔎</span>Explore</button>
+    </div>
 
     ${reviewCard()}
 
@@ -285,6 +301,15 @@ function profileScreen() {
       <div class="set-row"><span>Exam board</span><div class="seg-tabs small">${['all', 'AQA', 'Edexcel', 'Eduqas'].map((b) => `<button class="${S.board === b ? 'on' : ''}" data-board="${b}">${b === 'all' ? 'All' : b}</button>`).join('')}</div></div>
       <button class="set-row" data-act="sound"><span>Sound effects</span><b>${S.sound ? 'On' : 'Off'}</b></button>
       <button class="set-row" data-act="voice"><span>Hana and Bit's voices</span><b>${S.voice ? 'On' : 'Off'}</b></button>
+      <div class="set-row col"><span>Hana's voice</span>
+        <select id="set-hvoice" aria-label="Hana's voice"><option value="">Automatic (most like Kimberly)</option>${englishVoices().map((v) => `<option value="${esc(v.name)}" ${S.hanaVoice === v.name ? 'selected' : ''}>${esc(v.name)} · ${esc(v.lang)}</option>`).join('')}</select>
+        <div class="seg-tabs small">${Object.keys(HANA_PITCH).map((p) => `<button class="${S.hanaPitch === p ? 'on' : ''}" data-pitch="${p}">${p[0].toUpperCase() + p.slice(1)}</button>`).join('')}<button data-act="preview-voice">▶ Preview</button></div>
+        <small class="muted">Now using: ${esc(hanaVoice(S.hanaVoice)?.name || 'your phone\'s default voice')}</small></div>
+      <button class="set-row" data-act="handsfree"><span>Hands-free calls</span><b>${S.handsFree ? 'On' : 'Off'}</b></button>
+      <div class="set-row col"><span>Hana AI (online, optional)</span>
+        <small class="muted">Add your own Anthropic API key and Hana can chat about anything using Claude when you're online. The key stays on this device and is only sent to Anthropic. Anthropic charges you for usage. Without a key, calls use the offline tutor.</small>
+        <input id="set-aikey" type="password" autocomplete="off" placeholder="sk-ant-…" value="${esc(S.aiKey)}" aria-label="Anthropic API key">
+        <div class="seg-tabs small"><button class="${S.aiOn ? 'on' : ''}" data-act="ai-toggle">${S.aiOn ? 'On' : 'Off'}</button><button data-act="ai-test">Test key</button></div></div>
       <div class="set-row"><span>Offline learning</span><b class="${navigator.onLine ? '' : 'off'}" id="offline-state">${offlineText()}</b></div>
       ${installPrompt ? '<button class="set-row" data-act="install"><span>Install Sprout</span><b>Add to home screen</b></button>' : ''}
       <button class="set-row danger" data-act="reset"><span>Reset all progress</span></button>
@@ -420,6 +445,16 @@ function renderAvatarBuilder() {
   </div>`;
 }
 
+/* ================= Call Hana ================= */
+function openCall() {
+  startCall({
+    onEnd: (secs) => { if (secs) addTime(secs); toast(`Call ended · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`); render(); },
+    onLessonDone: ({ c, l, stars }) => { const first = !S.done[l.id]; S.done[l.id] = Math.max(starsOf(l.id), stars); learnLesson(c, l); S.seeds += first ? 5 : 1; addXP(10 + stars * 2); },
+    chess: () => { S.tab = 'explore'; openCourse = 'chess'; render(); },
+    revise: () => startRevise(),
+  });
+}
+
 /* ================= Smart revise ================= */
 function startRevise() {
   const r = buildReview(10);
@@ -443,6 +478,40 @@ function offlineText() {
 window.addEventListener('online', () => { const el = document.getElementById('offline-state'); if (el) el.textContent = offlineText(); });
 window.addEventListener('offline', () => { const el = document.getElementById('offline-state'); if (el) el.textContent = offlineText(); toast('You\'re offline. Everything still works.'); });
 
+/* ================= Motion helpers ================= */
+// Cards further down the page animate in as they scroll into view.
+let io = null;
+function armReveal() {
+  if (!('IntersectionObserver' in window) || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+  io?.disconnect();
+  const root = document.getElementById('main'); if (!root) return;
+  io = new IntersectionObserver((entries) => entries.forEach((en) => { if (en.isIntersecting) { en.target.classList.remove('pending'); en.target.classList.add('in'); io.unobserve(en.target); } }), { root, threshold: 0.08 });
+  const h = root.clientHeight;
+  root.querySelectorAll('.rise, .topic, .lesson-row, .chapter, .bdg').forEach((el) => { if (el.getBoundingClientRect().top > h + 10) { el.classList.add('pending'); io.observe(el); } });
+}
+// Material-style ripple on tappable things.
+document.addEventListener('pointerdown', (e) => {
+  const el = e.target.closest('.primary-btn, .topic, .lesson-row, .row, .tab, .cc, .gbtn, .opt, .pic, .quick button, .continue-card, .revise-card, .call-btn, .hc-call');
+  if (!el || el.disabled) return;
+  const r = el.getBoundingClientRect(); const d = Math.max(r.width, r.height) * 2;
+  const s = document.createElement('span'); s.className = 'ripple';
+  s.style.cssText = `width:${d}px;height:${d}px;left:${e.clientX - r.left - d / 2}px;top:${e.clientY - r.top - d / 2}px`;
+  if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
+  el.style.overflow = 'hidden'; el.appendChild(s); setTimeout(() => s.remove(), 650);
+}, { passive: true });
+// Gentle 3D tilt on topic tiles (mouse and trackpad only).
+if (window.matchMedia?.('(hover: hover)').matches) {
+  document.addEventListener('pointermove', (e) => {
+    const el = e.target.closest('.topic, .continue-card'); if (!el) return;
+    const r = el.getBoundingClientRect(); const x = (e.clientX - r.left) / r.width - 0.5; const y = (e.clientY - r.top) / r.height - 0.5;
+    el.style.setProperty('--rx', `${(-y * 8).toFixed(2)}deg`); el.style.setProperty('--ry', `${(x * 10).toFixed(2)}deg`); el.style.setProperty('--mx', `${(x + 0.5) * 100}%`);
+  });
+  document.addEventListener('pointerout', (e) => { const el = e.target.closest?.('.topic, .continue-card'); if (el && !el.contains(e.relatedTarget)) { el.style.removeProperty('--rx'); el.style.removeProperty('--ry'); } });
+}
+// Hana "talks": her picture bobs and glows while she speaks anywhere in the app.
+onSpeaking((who, on) => document.body.classList.toggle(`${who}-talking`, on));
+voicesReady.then(() => { if (S.tab === 'profile' && !openCourse && !openAvatar && !callActive() && !lessonActive() && !gameActive()) render(); });
+
 /* ================= Events ================= */
 let installPrompt = null;
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; });
@@ -459,6 +528,7 @@ document.addEventListener('click', (e) => {
   if (d.av !== undefined) { const [k, v] = d.av.split(':'); draftAv[k] = +v; sfx.tap(); return renderAvatarBuilder(); }
   if (d.avtab) { avTab = d.avtab; return renderAvatarBuilder(); }
   if (d.board) { S.board = d.board; save(); return render(); }
+  if (d.pitch) { S.hanaPitch = d.pitch; save(); hanaSay('How about this?', { force: true }); return render(); }
   if (d.ob) {
     S.onboarded = true;
     if (d.ob === 'habits') S.tab = 'home';
@@ -506,6 +576,11 @@ document.addEventListener('click', (e) => {
     case 'av-save': S.avatar = { ...draftAv }; save(); openAvatar = false; sfx.win(); hanaSay('Looking great!'); toast('Character saved'); return render();
     case 'av-cancel': openAvatar = false; return render();
     case 'revise': return startRevise();
+    case 'call': return openCall();
+    case 'handsfree': S.handsFree = !S.handsFree; save(); return render();
+    case 'preview-voice': hanaSay('Hi! I\'m Hana. This is how I sound. Ready to learn?', { force: true }); return;
+    case 'ai-toggle': if (!S.aiKey && !S.aiOn) return toast('Add your API key first'); S.aiOn = !S.aiOn; save(); return render();
+    case 'ai-test': { if (!S.aiKey) return toast('Add your API key first'); toast('Testing…'); import('./hana-ai.js').then((m) => m.testKey()).then((r) => { S.aiOn = true; save(); toast(`Hana AI works: "${r}"`); render(); }).catch((err) => toast(err?.message === 'key' ? 'That key didn\'t work. Check it and try again.' : 'Couldn\'t reach Anthropic. Are you online?')); return; }
     case 'game-review': if (lastGame) { const g = lastGame; showReview(g.record, { avatar: (sz) => myAvatar(sz), name: () => S.name || 'You', onBack: () => { openCourse = g.lessonId ? 'chess' : null; render(); } }); } return;
     case 'install': installPrompt?.prompt(); installPrompt = null; return;
     case 'reset': return confirmSheet('Reset all progress?', 'reset-yes');
@@ -525,9 +600,15 @@ document.addEventListener('input', (e) => {
     document.getElementById('no-results').hidden = any;
   }
   if (e.target.id === 'set-name') { S.name = e.target.value.trim(); save(); }
+  if (e.target.id === 'set-aikey') { S.aiKey = e.target.value.trim(); if (!S.aiKey) S.aiOn = false; save(); }
+});
+
+document.addEventListener('change', (e) => {
+  if (e.target.id === 'set-hvoice') { S.hanaVoice = e.target.value; save(); hanaSay('Hi! This is my new voice.', { force: true }); }
 });
 
 document.addEventListener('submit', (e) => {
+  if (e.defaultPrevented) return;
   e.preventDefault();
   if (e.target.id === 'habit-form') {
     const name = document.getElementById('h-name').value.trim(); if (!name) return;

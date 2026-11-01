@@ -7,7 +7,7 @@ export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&a
 export const DEFAULT = {
   onboarded: false, tab: 'home', course: null, lib: 'all', name: '',
   xp: 0, seeds: 300, streak: 0, lastDay: null, xpByDay: {}, timeByDay: {}, done: {},
-  dailyGoal: 20, sound: true, voice: true, board: 'all', mem: {}, avatar: null, wins: 0, perfect: false,
+  dailyGoal: 20, sound: true, voice: true, hanaVoice: '', hanaPitch: 'bright', handsFree: true, aiOn: false, aiKey: '', board: 'all', mem: {}, avatar: null, wins: 0, perfect: false,
   habits: [
     { id: 'h1', name: 'Drink water', emoji: '💧', color: 'blue', log: {} },
     { id: 'h2', name: 'Revise for 20 minutes', emoji: '📚', color: 'purple', log: {} },
@@ -68,24 +68,10 @@ export const sfx = {
   win: () => tone([[523, 0.1], [659, 0.1], [784, 0.1], [1047, 0.32]]),
 };
 
-/* ---- speech ---- */
-let voices = [];
-function loadVoices() { try { voices = speechSynthesis.getVoices() || []; } catch { voices = []; } }
-if ('speechSynthesis' in window) { loadVoices(); speechSynthesis.addEventListener?.('voiceschanged', loadVoices); }
-const voiceFor = (lang) => {
-  if (!lang) return null;
-  const want = lang.toLowerCase().replace('_', '-'); const base = want.split('-')[0];
-  return voices.find((v) => v.lang.toLowerCase().replace('_', '-') === want) || voices.find((v) => v.lang.toLowerCase().startsWith(base)) || null;
-};
-export const canSpeak = (lang) => !!voiceFor(lang);
-export function speak(text, lang, rate = 0.85) {
-  try {
-    const v = voiceFor(lang); if (!v) return;
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text); u.lang = v.lang; u.voice = v; u.rate = rate;
-    speechSynthesis.speak(u);
-  } catch { /* no speech */ }
-}
+/* ---- speech (lesson audio in each language) ---- */
+import { say, hasVoiceFor } from './speech.js';
+export const canSpeak = (lang) => hasVoiceFor(lang);
+export function speak(text, lang, rate = 0.85) { return say(text, { lang, rate }); }
 
 /* ---- little animations ---- */
 const reduced = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
