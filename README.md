@@ -1,12 +1,13 @@
 # 🌱 Sprout
 
-A playful, cartoon-style learning app with chunky buttons, a lesson path, streaks, hearts, XP and a mascot (Pip the sprout).
+A playful, cartoon-style learning app with chunky buttons, a lesson path, streaks, hearts, XP and a guide: **Hana**, an original chibi anime girl with a sprout for an ahoge.
 
-**Three things in one app**
+**What's inside**
 
 | Tab | What it does |
 | --- | --- |
-| **Chess Openings** course | 5 units, 43 gambits from the Meridium library. Name the opening on a board, find the key move, put the moves in order, match openings to moves. |
+| **Chess** | Play real games against Hana, an AI that runs on your phone (Easy / Medium / Hard). Each lesson starts from one of 43 gambits from the Meridium library; win or draw to pass. Hana grades every move (Best, Good, Inaccuracy, Mistake, Blunder) and suggests a better move. Hints and take-backs cost gems. Each unit ends with a short review quiz. **Free play** starts a full game from move one. |
+| **GCSE History** | The Cold War (1945–1991) in 3 units, built from your *Cold War Revision Starter* Obsidian note: dates, causes, putting events in order, matching years to events. |
 | **Spanish** course | 4 units (Basics, Food, Animals, Family). Picture cards, listening (🔊 uses your phone's Spanish voice), sentence building, matching pairs. |
 | **Habits** | Daily check-ins with per-habit streaks and a 7-day history. Each check-in earns 5 XP. |
 
@@ -48,8 +49,10 @@ npm run android:apk  # → android/app/build/outputs/apk/debug/app-debug.apk
 ## Code map
 - `www/index.html`, `www/css/style.css`: the app shell and the whole visual style
 - `www/js/app.js`: screens, lesson engine, hearts/XP/streaks, habits
-- `www/js/courses.js`: course units and question generators
+- `www/js/game.js`: the chess game screen vs Hana
+- `www/js/engine-worker.js`: the chess AI (alpha-beta search in a Web Worker, with a time limit per move)
+- `www/js/courses.js`: course units and question generators (chess, GCSE History, Spanish)
 - `www/js/gambits.js`: opening data (generated from `scripts/gambits_data.json`)
-- `www/js/mascot.js`: Pip, drawn as SVG with moods
+- `www/js/mascot.js`: Hana, drawn as SVG with four moods (happy, cheer, sad, think)
 - `www/vendor/chess.js`: [chess.js](https://github.com/jhlywa/chess.js) 1.4.0 (BSD-2-Clause) for boards and legal moves
 - `capacitor.config.json` + `.github/workflows/android.yml`: Android packaging

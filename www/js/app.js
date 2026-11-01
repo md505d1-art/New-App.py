@@ -1,4 +1,5 @@
-import { COURSES } from './courses.js';
+import { COURSES, gambitStart } from './courses.js';
+import { startGame } from './game.js';
 import { mascot } from './mascot.js';
 
 /* ================= State ================= */
@@ -120,10 +121,11 @@ function render() {
 function renderOnboarding() {
   $app.innerHTML = `<div class="onboard">
     <div class="ob-hero">${mascot('cheer', 150)}</div>
-    <h1>Hi, I'm Pip!</h1>
+    <h1>Hi, I'm Hana!</h1>
     <p class="muted">Tiny lessons, every day. What do you want to grow first?</p>
     <div class="ob-list">
-      <button class="pick" data-ob="chess"><span class="pick-ic">♞</span><span><b>Chess Openings</b><small>43 gambits from your Meridium library</small></span></button>
+      <button class="pick" data-ob="chess"><span class="pick-ic">♞</span><span><b>Chess</b><small>Play gambits against an AI that coaches you</small></span></button>
+      <button class="pick" data-ob="history"><span class="pick-ic">📜</span><span><b>GCSE History</b><small>The Cold War, from your revision notes</small></span></button>
       <button class="pick" data-ob="es"><span class="pick-ic">🇪🇸</span><span><b>Spanish</b><small>Words, phrases and listening</small></span></button>
       <button class="pick" data-ob="habits"><span class="pick-ic">✅</span><span><b>Daily Habits</b><small>Build streaks for the things you care about</small></span></button>
     </div>
@@ -139,7 +141,7 @@ function learnView() {
       const done = !!S.done[l.id]; const open = lessonUnlocked(l.id, c); const isCur = l.id === cur;
       const st = done ? 'done' : isCur ? 'current' : open ? 'open' : 'locked';
       const x = offs[i++ % offs.length];
-      const icon = done ? '★' : st === 'locked' ? '🔒' : c.id === 'chess' ? '♞' : '★';
+      const icon = done ? '★' : st === 'locked' ? '🔒' : l.kind === 'play' ? '♞' : l.kind === 'quiz' ? '📝' : '★';
       let html = `<div class="node-wrap" style="--x:${x}px">
         ${isCur ? '<div class="start-tip">START</div>' : ''}
         <button class="node ${st} c-${u.color}" data-lesson="${l.id}" ${st === 'locked' ? 'aria-disabled="true"' : ''} aria-label="${esc(l.title)}">${icon}</button>
@@ -160,7 +162,11 @@ function learnView() {
       <div class="path">${nodes}<div class="path-mascot ${side}">${mascot(ui % 2 ? 'think' : 'happy', 96)}</div></div>
     </section>`;
   }).join('');
-  return `<div class="learn">${units}<p class="end-note muted">More units are growing. Check back soon! 🌱</p></div>`;
+  const free = c.id === 'chess' ? `<div class="free">
+      <div class="free-top">${mascot('happy', 64)}<div><b>Free play vs Hana</b><small>A full game from the start. Hana grades every move you make.</small></div></div>
+      <div class="seg">${[1, 2, 3].map((lv) => `<button data-free="${lv}">${['', 'Easy', 'Medium', 'Hard'][lv]}</button>`).join('')}</div>
+    </div>` : c.note ? `<p class="course-note">📓 ${esc(c.note)}</p>` : '';
+  return `<div class="learn">${free}${units}<p class="end-note muted">More units are growing. Check back soon! 🌱</p></div>`;
 }
 
 function habitsView() {
@@ -184,7 +190,7 @@ function habitsView() {
   return `<div class="habits">
     <div class="h-hero">
       <div class="ring" style="--p:${pct}"><div>${doneN}/${habits.length}</div></div>
-      <div><h2>Today's habits</h2><p class="muted">${doneN === habits.length && habits.length ? 'All done. Pip is proud of you!' : 'Each check-in earns 5 XP and keeps your streak alive.'}</p></div>
+      <div><h2>Today's habits</h2><p class="muted">${doneN === habits.length && habits.length ? 'All done. Hana is proud of you!' : 'Each check-in earns 5 XP and keeps your streak alive.'}</p></div>
     </div>
     ${cards || `<div class="empty">${mascot('think', 90)}<p>No habits yet. Add one below.</p></div>`}
     <button class="btn blue wide" data-act="addhabit">+ ADD A HABIT</button>
@@ -198,7 +204,7 @@ function profileView() {
   const todayXP = S.xpByDay[today()] || 0;
   const badges = [
     ['🔥', 'Spark', '3-day streak', S.streak >= 3], ['🏆', 'Scholar', '10 lessons', lessons >= 10],
-    ['💯', 'Perfectionist', 'Finish a lesson with no mistakes', !!S.perfect], ['🌳', 'Evergreen', '1,000 XP', S.xp >= 1000],
+    ['💯', 'Perfectionist', 'A perfect lesson or a 90%+ game', !!S.perfect], ['♚', 'Checkmate', 'Beat Hana at chess', (S.wins || 0) >= 1], ['📜', 'Historian', 'Finish a GCSE History unit', ['cw:0:1', 'cw:1:1', 'cw:2:0'].some((k) => S.done[k])], ['🌳', 'Evergreen', '1,000 XP', S.xp >= 1000],
   ];
   return `<div class="profile">
     <div class="p-head">${mascot('happy', 84)}<div><h2>Your garden</h2><p class="muted">Learning ${esc(course().name)}</p></div></div>
@@ -281,6 +287,7 @@ function startLesson(id) {
   regenHearts();
   if (S.hearts <= 0) return heartsSheet(true);
   const lesson = allLessons().find((l) => l.id === id);
+  if (lesson.kind === 'play') return startChessLesson(lesson);
   const qs = course().questions(lesson);
   L = { id, lesson, queue: qs, total: qs.length, idx: 0, correct: 0, wrong: 0, sel: null, built: [], checked: false, started: Date.now(), match: null };
   renderQuestion();
@@ -353,7 +360,7 @@ function feedback(ok, answerText) {
   document.querySelector('.pbar i').style.width = `${(L.correct / L.total) * 100}%`;
   const foot = document.getElementById('foot');
   foot.className = `l-foot ${ok ? 'ok' : 'no'}`;
-  foot.innerHTML = `<div class="foot-inner"><div class="fb"><span class="fb-ic">${ok ? '✔' : '✖'}</span><div><b>${ok ? praise : 'Correct answer:'}</b>${ok ? '' : `<p class="${q.mono ? 'mono' : ''}">${esc(answerText)}</p>`}</div></div>
+  foot.innerHTML = `<div class="foot-inner"><div class="fb"><span class="fb-ic">${ok ? '✔' : '✖'}</span><div><b>${ok ? praise : 'Correct answer:'}</b>${ok ? '' : `<p class="${q.mono ? 'mono' : ''}">${esc(answerText)}</p>`}${q.explain ? `<small class="explain">${esc(q.explain)}</small>` : ''}</div></div>
     <button class="btn ${ok ? 'green' : 'red'}" id="check" data-act="check">${S.hearts <= 0 && !ok ? 'END LESSON' : 'CONTINUE'}</button></div>`;
 }
 
@@ -388,6 +395,57 @@ function finish() {
   L = null;
 }
 
+/* ================= Chess games vs Hana ================= */
+const gameCallbacks = {
+  gems: () => S.gems,
+  sfx,
+  spendGems(n) { if (S.gems < n) { toast('Not enough gems. Win games to earn more!'); return false; } S.gems -= n; save(); return true; },
+  onQuit(clear) { confirmSheet('Leave this game? It won\'t count.', 'game-quit'); pendingQuit = clear; },
+  onFinish: gameFinished,
+};
+let pendingQuit = null;
+
+function startChessLesson(lesson) {
+  const g = gambitStart(lesson.play.key);
+  startGame({ fen: g.fen, side: g.side, level: lesson.play.level, title: g.name, idea: g.idea, prefix: g.moves, lessonId: lesson.id,
+    intro: `Let's play the <b>${esc(g.name)}</b>. You're ${g.side === 'w' ? 'White' : 'Black'}.<br><small>${esc(g.idea)}</small>` }, gameCallbacks);
+}
+function startFreeGame(level) {
+  const side = Math.random() < 0.5 ? 'w' : 'b';
+  startGame({ side, level, title: 'Free play', intro: `New game! You're ${side === 'w' ? 'White, so you move first' : 'Black, so I move first'}.` }, gameCallbacks);
+}
+
+function gameFinished(r) {
+  const pass = r.result !== 'loss';
+  let xp = r.result === 'win' ? 15 + r.level * 5 : r.result === 'draw' ? 10 : 3;
+  let gems = r.result === 'win' ? 10 * r.level : 0;
+  if (r.lessonId && pass) { if (!S.done[r.lessonId]) gems += 10; S.done[r.lessonId] = true; }
+  if (r.result === 'loss' && r.lessonId) { S.hearts = Math.max(0, S.hearts - 1); if (S.hearts === MAX_HEARTS - 1) S.heartsAt = Date.now(); }
+  if (r.accuracy >= 90 && r.moves >= 10) S.perfect = true;
+  S.gems += gems; S.games = (S.games || 0) + 1; if (r.result === 'win') S.wins = (S.wins || 0) + 1;
+  addXP(xp);
+  if (pass) sfx.win(); else sfx.bad();
+  const title = r.result === 'win' ? 'You won!' : r.result === 'draw' ? 'Draw!' : 'Hana won';
+  const g = r.grades;
+  $app.innerHTML = `<div class="done-screen">
+    ${pass ? `<div class="confetti">${[...Array(28)].map((_, k) => `<i style="--l:${(k * 37) % 100}%;--d:${(k % 7) * 0.15}s;--c:${['#58cc02', '#1cb0f6', '#ffc800', '#ff4b4b', '#ce82ff'][k % 5]}"></i>`).join('')}</div>` : ''}
+    ${mascot(pass ? 'cheer' : 'sad', 150)}
+    <h1 class="${pass ? '' : 'lost'}">${title}</h1><p class="muted">${esc(r.how)} · ${r.moves} moves</p>
+    <div class="results">
+      <div class="res y"><small>XP</small><b>⚡ ${xp}</b></div>
+      <div class="res g"><small>ACCURACY</small><b>🎯 ${r.accuracy}%</b></div>
+      <div class="res b"><small>GEMS</small><b>💎 ${gems}</b></div>
+    </div>
+    <div class="grades">
+      <span class="grade g-best">⭐ ${g.best} best</span><span class="grade g-good">👍 ${g.good} good</span>
+      <span class="grade g-inacc">🤔 ${g.inacc}</span><span class="grade g-mistake">❗ ${g.mistake}</span><span class="grade g-blunder">💥 ${g.blunder}</span>
+    </div>
+    ${r.lessonId && !pass ? `<p class="muted">Win or draw to complete this lesson. −1 ❤️</p>` : ''}
+    ${r.lessonId && !pass && S.hearts > 0 ? `<button class="btn green wide" data-retry="${r.lessonId}">TRY AGAIN</button>` : ''}
+    ${!r.lessonId ? `<button class="btn green wide" data-free="${r.level}">PLAY AGAIN</button>` : ''}
+    <button class="btn ${!pass || !r.lessonId ? 'ghost' : 'green'} wide" data-act="home">CONTINUE</button></div>`;
+}
+
 /* ================= Events ================= */
 let installPrompt = null;
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; });
@@ -400,6 +458,8 @@ document.addEventListener('click', (e) => {
   if (d.tab) { S.tab = d.tab; save(); sfx.tap(); return render(); }
   if (d.course) { S.course = d.course; S.tab = 'learn'; save(); closeSheet(); return render(); }
   if (d.guide) return guideSheet(+d.guide);
+  if (d.free) return startFreeGame(+d.free);
+  if (d.retry) return startLesson(d.retry);
   if (d.goal) { S.dailyGoal = +d.goal; save(); return render(); }
   if (d.lesson) {
     if (t.getAttribute('aria-disabled')) return toast('Finish the lessons above to unlock this one');
@@ -442,6 +502,7 @@ document.addEventListener('click', (e) => {
     case 'quit': return confirmSheet('Quit? You\'ll lose this lesson\'s progress.', 'quit-yes');
     case 'quit-yes': L = null; closeSheet(); return render();
     case 'home': return render();
+    case 'game-quit': closeSheet(); pendingQuit?.(); pendingQuit = null; return render();
   }
 });
 
