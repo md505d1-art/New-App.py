@@ -5,8 +5,8 @@ export const dayOffset = (n) => { const d = new Date(); d.setDate(d.getDate() + 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 export const DEFAULT = {
-  onboarded: false, tab: 'today', course: null, lib: 'all', name: '',
-  xp: 0, seeds: 300, streak: 0, lastDay: null, xpByDay: {}, done: {},
+  onboarded: false, tab: 'home', course: null, lib: 'all', name: '',
+  xp: 0, seeds: 300, streak: 0, lastDay: null, xpByDay: {}, timeByDay: {}, done: {},
   dailyGoal: 20, sound: true, wins: 0, perfect: false,
   habits: [
     { id: 'h1', name: 'Drink water', emoji: '💧', color: 'blue', log: {} },
@@ -25,11 +25,16 @@ function load() {
   delete s.hearts; delete s.heartsAt; delete s.chests;
   if (['learn', 'habits', 'profile'].includes(s.tab)) s.tab = { learn: 'learn', habits: 'today', profile: 'me' }[s.tab];
   for (const k of Object.keys(s.done)) if (s.done[k] === true) s.done[k] = 1;
+  s.timeByDay = s.timeByDay || {};
+  if (['today', 'learn', 'garden', 'me'].includes(s.tab)) s.tab = { today: 'home', learn: 'explore', garden: 'progress', me: 'profile' }[s.tab];
   return s;
 }
 export const S = load();
 export function reset() { for (const k of Object.keys(S)) delete S[k]; Object.assign(S, structuredClone(DEFAULT)); save(); }
 export function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch { /* storage unavailable */ } }
+
+// Seconds spent learning, per day (for the activity chart). Capped so an idle screen doesn't count for hours.
+export function addTime(secs) { const t = today(); S.timeByDay[t] = (S.timeByDay[t] || 0) + Math.min(Math.max(0, secs), 1800); save(); }
 
 export function streakAlive() { return S.lastDay === today() || S.lastDay === dayOffset(-1); }
 export function addXP(n) {

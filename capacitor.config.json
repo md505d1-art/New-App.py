@@ -2,5 +2,5 @@
   "appId": "com.md505d1.sprout",
   "appName": "Sprout",
   "webDir": "www",
-  "android": { "backgroundColor": "#58cc02" }
+  "android": { "backgroundColor": "#6c4ce0" }
 }
