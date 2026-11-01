@@ -1,0 +1,23 @@
+{
+  "name": "sprout",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sprout: bite-sized chess opening and Spanish lessons plus a habit tracker, in a playful cartoon style.",
+  "scripts": {
+    "start": "npx --yes http-server www -p 8080 -c-1",
+    "check": "node scripts/check-gambits.mjs",
+    "icons": "node scripts/make-icons.mjs",
+    "android:add": "npx cap add android",
+    "android:assets": "npx @capacitor/assets generate --android --assetPath assets",
+    "android:sync": "npx cap sync android",
+    "android:apk": "cd android && ./gradlew assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/core": "^8.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.0.0"
+  }
+}
