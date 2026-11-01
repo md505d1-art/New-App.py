@@ -1,65 +1,57 @@
 # 🌱 Sprout
 
-A calm, pastel learning app: cream pages, lavender cards and one purple accent. Your guide is **Hana** (teal braided hair with flowers, orange jacket, overalls) and her floating triangle robot **Bit**.
+A calm, pastel learning app for GCSEs, languages and chess. Your guide is **Hana** (teal braided hair, orange jacket) and her floating triangle robot **Bit**. Both talk, using your phone's built-in voices. Everything works **offline**.
 
 ## What's inside
 
 | Area | What it does |
 | --- | --- |
-| **Home** | Greeting, weekly streak tracker, "Continue learning" card, topic suggestions and today's habits. |
-| **Explore** | 43 courses with search and filters: School, Languages, Chess. |
-| **School (GCSE)** | Maths, English Language, English Literature, Biology, Chemistry, Physics, History (Cold War, from the *Cold War Revision Starter* note), Geography and Computer Science. 4–5 lessons each, with key-term matching and explanations. Starter content: check it against your exam board's specification. |
-| **Languages** | 33 languages: Spanish, French, German, Italian, Portuguese, Dutch, Swedish, Norwegian, Danish, Finnish, Polish, Czech, Croatian, Romanian, Hungarian, Greek, Turkish, Russian, Ukrainian, Arabic, Hebrew, Persian, Hindi, Japanese, Korean, Chinese, Vietnamese, Thai, Indonesian, Tagalog, Swahili, Welsh and Irish. 5 chapters each (greetings, food, animals, family, numbers) with picture questions, listening (uses your phone's voices when it has one for that language), spelling with letter tiles, romanisation for non-Latin scripts, and sentence building for Spanish, French, German and Italian. |
-| **Chess** | Play real games against Hana, an on-device AI (Easy, Medium, Hard), starting from 43 gambits. Every move is graded with a better-move suggestion; pieces slide; hints and take-backs cost seeds. Free play mode. Each game is logged for review with the one mistake to avoid next time (from the Chess Dashboard note). |
-| **Progress** | Learning time by week, month or all time (with change from the previous period), lessons completed, mastered topics, a garden with one plant per course, and chess game review. |
-| **Profile** | Badges, a bookshelf (from the Reading Dashboard note) and settings. |
+| **Home** | Greeting, weekly streak, Hana (tap her or Bit to chat), **Smart revise**, "Continue learning", topic ideas and daily habits. |
+| **Explore** | 66 courses with search. School subjects can be filtered by exam board: **AQA, Edexcel or Eduqas**. |
+| **School (GCSE)** | Every GCSE subject across AQA, Edexcel and Eduqas: Maths, Statistics, English Language, English Literature, Biology, Chemistry, Physics, Combined Science, Geography, History (Cold War, from your notes), Religious Studies, Computer Science, Business, Economics, Citizenship, Psychology, Sociology, Astronomy, Latin, Film Studies, Media Studies, Art and Design, Design and Technology, Electronics, Engineering, Food Preparation and Nutrition, Drama, Dance, Music and PE. Each subject is tagged with the boards that offer it. GCSE languages link to the matching language course. Content is starter level: check it against your specification. |
+| **Languages** | 34 languages, including Czech (now with sentence building) and Urdu, plus **British Sign Language** (fingerspelling vowels, numbers 1–5 and everyday signs, with hand diagrams). |
+| **Chess** | Chess.com-style play against Hana: drag or tap to move, a green board with classic pieces, wooden move and capture sounds, check, castle and promotion sounds, an eval bar, captured pieces, and every move rated live (Best, Excellent, Good, Inaccuracy, Mistake, Blunder). Then a full **Game review**: accuracy for both players, an evaluation graph, move-by-move stepping with the best move drawn as a green arrow, and a summary table. 43 gambit lessons plus free play. |
+| **Progress** | Learning time by week, month or all time, lessons completed, mastered topics, your garden and chess game history. |
+| **Profile** | **Build your own character** (skin, hair style and colour, eyes, smile, outfit, extras, background), badges, bookshelf and settings (exam board, sound, voices, offline status). |
 
-Each lesson starts with a **Key idea** card (key terms, words with audio, timeline events or opening moves), then **Check your understanding**: pick an answer, tap **Check answer**, and see feedback from Hana. Missed questions come back at the end, and finished lessons earn 1–3 stars.
+### How lessons work (inspired by Seneca)
+Seneca keeps sessions short: a few concept cards, then lots of varied questions, with an algorithm deciding what to repeat and when. Sprout does the same:
+1. **Key idea**: read the key terms, words, signs or events first.
+2. **Check your understanding**: multiple choice, picture cards, **toggles** (pick the right word in each line), **wordfill** (type the missing word, with allowance for a missing accent or one typo), tile building, matching and **flashcards**. The same fact comes back in different formats.
+3. **Smart revise**: every fact you learn goes into spaced repetition (boxes 1–6, reviewed after 1, 2, 4, 7, 14 and 30 days). Each course shows a **memory** score.
 
 ## Get it on your phone
 
-### Option 1: install as a web app (iPhone and Android)
+### Option 1: installable web app (iPhone and Android)
 1. One-time setup on GitHub: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
-2. Every push runs the *Deploy web app to GitHub Pages* workflow. The app is then at
-   `https://md505d1-art.github.io/New-App.py/`
-3. Open that link on your phone:
-   - **iPhone (Safari):** Share button → **Add to Home Screen**
-   - **Android (Chrome):** ⋮ menu → **Install app** (or Profile tab → *Install Sprout*)
+2. Every push deploys to `https://md505d1-art.github.io/New-App.py/`
+3. Open it on your phone. iPhone (Safari): Share → **Add to Home Screen**. Android (Chrome): ⋮ → **Install app**.
 
-It works offline after the first visit.
+After the first visit everything is cached, including lessons, chess, fonts and images, so it works with no internet.
 
 ### Option 2: Android APK
-Every push runs the *Build Android APK* workflow, which:
-- attaches **Sprout.apk** to the **"Sprout – latest APK"** release (Releases section of this repo), and
-- uploads it as a workflow artifact.
-
-On your Android phone open the release, tap **Sprout.apk**, and allow "install unknown apps" for your browser when asked. This is a debug-signed build, fine for personal use but not for the Play Store.
+Every push builds **Sprout.apk** and attaches it to the **"Sprout – latest APK"** release. Everything is bundled inside the APK, so it works offline from the first launch. It's a debug-signed build for personal use.
 
 ## Run it locally
 ```bash
 npm start            # serves www/ at http://localhost:8080
 npm run check        # verifies every gambit line is legal chess
-npm run icons        # re-renders icons from the mascot (needs Playwright)
-```
-
-Build the APK yourself (needs Android Studio / Android SDK and Java 21):
-```bash
-npm install
-npm run android:add && npm run android:assets && npm run android:sync
-npm run android:apk  # → android/app/build/outputs/apk/debug/app-debug.apk
+npm run icons        # re-renders app icons from Hana's art (needs Playwright)
 ```
 
 ## Code map
-- `www/index.html`, `www/css/style.css`: the app shell and the whole visual style
-- `www/js/app.js`: screens (Home, Explore, Course, Progress, Profile), sheets, results
-- `www/js/lesson.js`: the lesson player
-- `www/js/store.js`: saved progress, sounds, speech, animation helpers
-- `www/js/art.js`: SVG topic icons, card thumbnails, the key-idea scene, the medal and garden plants
-- `www/js/content/`: GCSE subjects and the 33-language word lists
-- `www/js/game.js`: the chess game screen vs Hana
-- `www/js/engine-worker.js`: the chess AI (alpha-beta search in a Web Worker, with a time limit per move)
-- `www/js/courses.js`: builds every course and its question generators
-- `www/js/gambits.js`: opening data (generated from `scripts/gambits_data.json`)
-- `www/js/mascot.js`: Hana and Bit, drawn as SVG with five moods (happy, cheer, sad, think, wave)
-- `www/vendor/chess.js`: [chess.js](https://github.com/jhlywa/chess.js) 1.4.0 (BSD-2-Clause) for boards and legal moves
-- `capacitor.config.json` + `.github/workflows/android.yml`: Android packaging
+- `www/js/app.js`: screens, character creator, Smart revise, results
+- `www/js/lesson.js`: the lesson player and all question types
+- `www/js/srs.js`: spaced repetition and memory scores
+- `www/js/game.js`, `www/js/review.js`, `www/js/chess-analysis.js`, `www/js/chess-sound.js`: chess play, game review, move ratings and board sounds
+- `www/js/engine-worker.js`: the chess AI and analysis (alpha-beta search in Web Workers)
+- `www/js/mascot.js`, `www/js/voice.js`: Hana and Bit, and their voices
+- `www/js/avatar.js`: build-your-own character
+- `www/js/content/`: GCSE subjects (`gcse.js`, `gcse-more.js`), languages, BSL
+- `www/sw.js`: offline cache
+
+## Credits
+- Hana and Bit artwork: the character sheet supplied by the app's owner. Make sure you have the rights before publishing the app publicly.
+- Chess pieces: "cburnett" set by Colin M.L. Burnett (GPLv2+/BSD/GFDL), via the chessground package.
+- [chess.js](https://github.com/jhlywa/chess.js) 1.4.0 (BSD-2-Clause).
+- Fonts: Plus Jakarta Sans and DM Mono (SIL Open Font License), bundled for offline use.

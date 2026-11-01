@@ -3,6 +3,9 @@ import G from './gambits.js';
 import { Chess } from '../vendor/chess.js';
 import { LANGS, LANG_UNITS, wordsOf } from './content/languages.js';
 import { SUBJECTS } from './content/gcse.js';
+import { SUBJECTS_MORE, GCSE_MFL, CORE_BOARDS } from './content/gcse-more.js';
+import { BSL, SIGNS } from './content/bsl.js';
+export { GCSE_MFL };
 
 const shuffle = (a) => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const pick = (a, n) => shuffle(a).slice(0, n);
@@ -177,6 +180,8 @@ function factsQuestions(lesson) {
     const yOpts = shuffle([String(yr(it.year)), ...pick(years, 3)]);
     qs.push({ type: 'mc', prompt: `When was the ${it.event}?`, sub: it.detail.replace(/\d{4}/g, '____'), options: yOpts.map((label) => ({ label })), answer: yOpts.indexOf(String(yr(it.year))), explain: it.detail });
   }
+  const wf = items[Math.floor(Math.random() * items.length)];
+  qs.push({ type: 'wordfill', kicker: 'Wordfill', prompt: 'Type the year', before: `The ${wf.event}: `, after: '', answer: String(yr(wf.year)), explain: wf.detail });
   for (const w of lesson.whys) {
     const o = shuffle([w.a, ...w.wrong]);
     qs.push({ type: 'mc', prompt: w.q, options: o.map((label) => ({ label })), answer: o.indexOf(w.a) });
@@ -224,6 +229,8 @@ function langQuestions(lesson, course) {
       qs.push({ type: 'build', kicker: 'Spell it', prompt: `Spell “${w.en}”`, emoji: w.emoji, sub: w.rom, tiles: shuffle([...g, ...pick(pool, 3)]), answer: g, join: '', native: true });
     }
   });
+  const latin = !words.some((w) => w.rom) && !course.rtl;
+  if (latin) { const w = words[Math.floor(Math.random() * words.length)]; qs.push({ type: 'wordfill', kicker: 'Wordfill', prompt: `Type the ${course.name} for “${w.en}”`, emoji: w.emoji, before: '', after: '', answer: w.t, native: true }); }
   for (const [en, tr] of lesson.phrases || []) {
     const toks = tr.split(' ');
     const extra = pick([...new Set(all.map((x) => x.t))].filter((t) => !t.includes(' ') && !toks.includes(t)), 3);
@@ -255,41 +262,88 @@ function buildLanguage(lang, idx) {
 /* ---------------- GCSE subjects ---------------- */
 
 function quizQuestions(lesson) {
-  const qs = lesson.qs.map(([q, a, wrong, explain]) => {
+  const qs = lesson.qs.map(([q, a, wrong, explain], i) => {
     const o = shuffle([a, ...wrong]);
-    return { type: 'mc', kicker: lesson.title, prompt: q, options: o.map((label) => ({ label })), answer: o.indexOf(a), explain };
+    return { type: 'mc', kicker: lesson.title, prompt: q, options: o.map((label) => ({ label })), answer: o.indexOf(a), explain, fact: `${lesson.id}:q${i}` };
   });
   const [term, def] = lesson.terms[Math.floor(Math.random() * lesson.terms.length)];
   const defs = shuffle(lesson.terms.map((t) => t[1]));
   qs.push({ type: 'mc', kicker: 'Key term', prompt: `What does “${term}” mean?`, options: defs.map((label) => ({ label })), answer: defs.indexOf(def) });
+  qs.push(toggleQ(lesson.terms));
+  const [wt, wd] = lesson.terms[Math.floor(Math.random() * lesson.terms.length)];
+  qs.push({ type: 'wordfill', kicker: 'Wordfill', prompt: 'Type the missing key term', before: '', after: ` means: ${wd.charAt(0).toLowerCase()}${wd.slice(1)}.`, answer: wt });
   qs.push({ type: 'match', kicker: 'Key terms', prompt: 'Match each term to its meaning', pairs: lesson.terms });
   return shuffle(qs.slice(0, -1)).concat(qs.slice(-1));
 }
 
+// Seneca-style toggles: pick the right word in each line.
+export function toggleQ(terms) {
+  const rows = pick(terms, 2).map(([t, d]) => {
+    const other = pick(terms.filter((x) => x[0] !== t), 1)[0][0];
+    const opts = shuffle([t, other]);
+    return { options: opts, answer: opts.indexOf(t), after: d };
+  });
+  return { type: 'toggle', kicker: 'Toggles', prompt: 'Choose the right word in each line', rows };
+}
+
 function buildSubject(s, idx) {
-  return { id: `gcse:${s.id}`, cat: 'school', name: s.name, sub: 'GCSE', icon: s.icon, color: s.color, note: s.note,
+  return { id: `gcse:${s.id}`, cat: 'school', name: s.name, sub: s.sub || 'GCSE', icon: s.icon, glyph: s.glyph, color: s.color, note: s.note,
+    boards: s.boards || CORE_BOARDS[s.id] || ['AQA', 'Edexcel', 'Eduqas'],
     units: s.units.map((u, ui) => ({ title: u.title, desc: u.desc, color: PALETTE[(idx + ui) % PALETTE.length],
       guide: u.lessons.flatMap((l) => l.terms.map(([term, def]) => ({ term, def }))),
       lessons: u.lessons.map((l, li) => ({ id: `gcse:${s.id}:${ui}:${li}`, ...l })) })),
     questions: quizQuestions };
 }
 
+/* ---------------- British Sign Language ---------------- */
+
+function bslQuestions(lesson) {
+  const items = lesson.signs; const qs = [];
+  const pool = BSL.units.flatMap((u) => u.items);
+  for (const it of items) {
+    if (it.svg) {
+      const others = pick(pool.filter((x) => x.svg && x.word !== it.word && /^\d$/.test(x.word) === /^\d$/.test(it.word)), 3);
+      const o = shuffle([it, ...others]);
+      qs.push({ type: 'mc', kicker: 'Read the hand', prompt: /^\d$/.test(it.word) ? 'Which number is this?' : 'Which letter is this?', art: it.svg(150),
+        options: o.map((x) => ({ label: x.word })), answer: o.indexOf(it), explain: it.desc, fact: `${lesson.id}:${it.word}` });
+      const o2 = shuffle([it, ...others]);
+      qs.push({ type: 'pics', kicker: 'Find the sign', prompt: `Which picture shows ${it.word}?`, options: o2.map((x) => ({ label: '', svg: x.svg(90) })), answer: o2.indexOf(it), explain: it.desc });
+    } else {
+      const others = pick(SIGNS.filter((x) => x.word !== it.word), 3);
+      const o = shuffle([it, ...others]);
+      qs.push({ type: 'mc', kicker: 'How to sign it', prompt: `How do you sign “${it.word}”?`, emoji: it.emoji, options: o.map((x) => ({ label: x.desc })), answer: o.indexOf(it), fact: `${lesson.id}:${it.word}` });
+      const o2 = shuffle([it, ...others]);
+      qs.push({ type: 'mc', kicker: 'What does it mean?', prompt: 'Which word matches this sign?', sub: it.desc, options: o2.map((x) => ({ label: x.word, emoji: x.emoji })), answer: o2.indexOf(it) });
+    }
+  }
+  if (!items[0].svg) qs.push({ type: 'match', kicker: 'Pairs', prompt: 'Match each sign to its picture', pairs: items.slice(0, 4).map((x) => [x.word, x.emoji]) });
+  return items[0].svg ? shuffle(qs) : shuffle(qs.slice(0, -1)).concat(qs.slice(-1));
+}
+
+function buildBSL() {
+  return { ...BSL, units: BSL.units.map((u, ui) => ({ title: u.title, desc: u.desc, color: u.color,
+    guide: u.items.map((it) => ({ term: it.word, def: it.desc })),
+    lessons: chunk(u.items, u.items[0].svg ? 5 : 4).map((signs, li) => ({ id: `bsl:${ui}:${li}`, title: `${u.title}${u.items.length > 5 ? ` ${li + 1}` : ''}`, signs })) })),
+  questions: bslQuestions };
+}
+
 /* ---------------- Catalogue ---------------- */
 
-const history = { id: 'history', cat: 'school', name: 'History', sub: 'Cold War · from your notes', icon: 'history', color: 'red',
+const history = { id: 'history', cat: 'school', name: 'History', sub: 'Cold War · from your notes', icon: 'history', color: 'red', boards: CORE_BOARDS.history,
   units: buildFacts('cw', CW_UNITS), questions: factsQuestions,
   note: 'Built from your Cold War Revision Starter note. Check it against your AQA specification.' };
-const subjects = SUBJECTS.map(buildSubject);
+const subjects = [...SUBJECTS, ...SUBJECTS_MORE].map(buildSubject);
 subjects.splice(subjects.findIndex((c) => c.id === 'gcse:geography'), 0, history);
 
 export const COURSES = Object.fromEntries([
   { id: 'chess', cat: 'chess', name: 'Chess', sub: 'Play gambits vs Hana', icon: 'chess', color: 'green', units: buildChess(), questions: chessQuestions },
   ...subjects,
   ...LANGS.map(buildLanguage),
+  buildBSL(),
 ].map((c) => [c.id, c]));
 
 export const CATEGORIES = [
-  { id: 'school', name: 'School', blurb: 'GCSE subjects for Year 11' },
-  { id: 'language', name: 'Languages', blurb: `${LANGS.length} languages to start` },
+  { id: 'school', name: 'School', blurb: 'Every GCSE subject from AQA, Edexcel and Eduqas' },
+  { id: 'language', name: 'Languages', blurb: `${LANGS.length} languages and BSL` },
   { id: 'chess', name: 'Chess', blurb: 'Train against an AI coach' },
 ];

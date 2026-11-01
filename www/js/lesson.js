@@ -3,6 +3,7 @@ import { mascot } from './mascot.js';
 import { col, icon, ideaScene } from './art.js';
 import { GAMBITS, movesText } from './courses.js';
 import { S, save, esc, sfx, speak, canSpeak, burst, toast } from './store.js';
+import { hanaSay, bitSay } from './voice.js';
 
 const PIECES = { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' };
 const LETTERS = 'ABCDEFGH';
@@ -14,13 +15,13 @@ let L = null;
 
 export function startLesson(course, lesson, callbacks) {
   const qs = course.questions(lesson).map((q, i) => ({ ...q, _i: i }));
-  L = { course, lesson, cb: callbacks, phase: 'learn', queue: qs, total: qs.length, idx: 0, solved: 0,
+  L = { course, lesson, cb: callbacks, phase: lesson.noIntro ? 'quiz' : 'learn', answered: new Set(), queue: qs, total: qs.length, idx: 0, solved: 0,
     wrong: 0, firstTry: 0, combo: 0, bestCombo: 0, started: Date.now(), checked: false, sel: null, built: [], match: null, missed: new Set() };
-  renderLearn();
+  if (lesson.noIntro) renderQ(); else renderLearn();
 }
 export const lessonActive = () => !!L;
 
-const tts = () => L.course.tts;
+const tts = () => L.queue?.[L.idx]?.tts || L.course.tts;
 const voiced = () => !!tts() && canSpeak(tts());
 const langAttr = (on) => (on && L.course.tts ? ` lang="${L.course.tts}" dir="auto"` : '');
 const speakBtn = (text, big = false) => (voiced() ? `<button class="speak ${big ? 'big' : ''}" data-speak="${esc(text)}" aria-label="Play audio"><svg viewBox="0 0 24 24" width="${big ? 30 : 18}" height="${big ? 30 : 18}"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path d="M16 8q3 4 0 8M18.5 5.5q5 6.5 0 13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg></button>` : '');
@@ -31,7 +32,7 @@ function shell(main, foot) {
   document.getElementById('app').innerHTML = `<div class="lsn" style="--c:${c};--cd:${d};--cp:${p}">
     <header class="lsn-head">
       <button class="nav-ic" data-l="quit" aria-label="Leave lesson"><svg viewBox="0 0 24 24" width="24" height="24"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-      <b>Lesson ${L.cb.index} of ${L.cb.count}</b>
+      <b>${L.cb.count ? `Lesson ${L.cb.index} of ${L.cb.count}` : esc(L.lesson.title)}</b>
       <button class="nav-ic" data-l="menu" aria-label="Sound on or off">•••</button>
     </header>
     <div class="lsn-prog"><span class="bar"><i style="width:${pct}%"></i></span><em>${pct}%</em></div>
@@ -50,6 +51,8 @@ function ideaContent() {
     list: l.terms.map(([t, d]) => `<div class="idea-row"><span class="i-main"><b>${esc(t)}</b><small>${esc(d)}</small></span></div>`).join('') };
   if (l.items) return { text: 'Here are the key events. Read them, then answer the questions.',
     list: l.items.map((it) => `<div class="idea-row"><span class="i-year">${esc(it.year)}</span><span class="i-main"><b>${esc(it.event)}</b><small>${esc(it.detail)}</small></span></div>`).join('') };
+  if (l.signs) return { text: 'Learn these signs. Copy each one with your hands as you read.',
+    list: l.signs.map((it) => `<div class="idea-row sign">${it.svg ? `<span class="i-art">${it.svg(64)}</span>` : `<span class="i-emoji">${it.emoji}</span>`}<span class="i-main"><b>${esc(it.word)}</b><small>${esc(it.desc)}</small></span></div>`).join('') };
   if (l.keys) return { text: 'Review these openings before the quiz.',
     list: l.keys.map((k) => `<div class="idea-row"><span class="i-main"><b>${esc(GAMBITS[k].name)}</b><small class="mono">${esc(movesText(GAMBITS[k].moves))}</small><small>${esc(GAMBITS[k].idea)}</small></span></div>`).join('') };
   return { text: 'Read carefully, then answer the questions.', list: '' };
@@ -86,14 +89,17 @@ function shuffleIdx(n) { const a = [...Array(n).keys()]; for (let i = n - 1; i >
 
 function renderQ() {
   const q = L.queue[L.idx];
-  L.checked = false; L.sel = null; L.built = [];
+  L.checked = false; L.sel = null; L.built = []; L.tsel = []; L.flipped = false;
   if (q.type === 'match') L.match = { left: shuffleIdx(q.pairs.length), right: shuffleIdx(q.pairs.length), picked: null, solved: 0 };
   const listen = q.listen && voiced();
   const prompt = q.listen && !listen ? q.fallback : q.prompt;
   const optText = (o) => `<span class="o-txt"><span${o.native ? langAttr(true) : ''}>${esc(o.label)}</span>${o.sub ? `<small>${esc(o.sub)}</small>` : ''}</span>`;
   let body = '';
   if (q.type === 'mc') body = `${boardHTML(q.board)}<div class="opts">${q.options.map((o, k) => `<button class="opt" data-opt="${k}" style="--i:${k}"><span class="letter">${LETTERS[k]}</span>${o.emoji ? `<span class="o-emoji">${o.emoji}</span>` : ''}${optText(o)}<span class="o-mark"></span></button>`).join('')}</div>`;
-  if (q.type === 'pics') body = `<div class="pics">${q.options.map((o, k) => `<button class="pic" data-opt="${k}" style="--i:${k}"><span class="letter">${LETTERS[k]}</span><span class="pic-e">${o.emoji}</span>${optText(o)}</button>`).join('')}</div>`;
+  if (q.type === 'pics') body = `<div class="pics">${q.options.map((o, k) => `<button class="pic" data-opt="${k}" style="--i:${k}"><span class="letter">${LETTERS[k]}</span>${o.svg ? `<span class="pic-svg">${o.svg}</span>` : `<span class="pic-e">${o.emoji}</span>`}${o.label ? optText(o) : ''}</button>`).join('')}</div>`;
+  if (q.type === 'toggle') body = `<div class="toggles">${q.rows.map((r, ri) => `<p class="tg-row"><span class="tg">${r.options.map((op, k) => `<button class="tg-btn" data-tg="${ri}:${k}">${esc(op)}</button>`).join('')}</span><span class="tg-txt">${esc(r.after)}</span></p>`).join('')}</div>`;
+  if (q.type === 'wordfill') body = `<p class="wf">${esc(q.before || '')}<input id="wf" class="wf-in" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="type here"${langAttr(q.native)}>${esc(q.after || '')}</p>`;
+  if (q.type === 'flash') body = `<div class="flash" id="flash"><div class="flash-in"><div class="flash-face front">${q.front}</div><div class="flash-face back">${q.back}</div></div></div>`;
   if (q.type === 'build') body = `<div class="slot-line" id="built"${langAttr(q.native)}><span class="slot-hint">Tap the tiles in order</span></div>
     <div class="tiles" id="bank"${langAttr(q.native)}>${q.tiles.map((t, k) => `<button class="tile ${q.mono ? 'mono' : ''}" data-tile="${k}" style="--i:${k}">${esc(t)}</button>`).join('')}</div>`;
   if (q.type === 'match') body = `<div class="match">
@@ -104,14 +110,16 @@ function renderQ() {
   shell(`<div class="q-head"><h2>Check your understanding</h2><span>${L.idx + 1} of ${L.queue.length}</span></div>
     <article class="qcard" id="qcard">
       ${q.kicker ? `<span class="kicker">${esc(q.kicker)}</span>` : ''}
-      ${q.emoji ? `<div class="q-emoji">${q.emoji}</div>` : ''}
+      ${q.emoji ? `<div class="q-emoji">${q.emoji}</div>` : ''}${q.art ? `<div class="q-art">${q.art}</div>` : ''}
       ${listen ? `<div class="listen-row">${speakBtn(q.listen, true)}<button class="speak slow" data-speak="${esc(q.listen)}" data-slow="1" aria-label="Play slowly">🐢</button></div>` : ''}
       <p class="q-text">${esc(prompt)}</p>
       ${sub}${body}
     </article>
     <div id="fb"></div>`,
   q.type === 'match' ? `<p class="foot-hint">Tap a word on each side to pair them.</p>`
-    : `<button class="primary-btn" id="go" data-l="check" disabled>Check answer ${arrow}</button>`);
+    : q.type === 'flash' ? `<button class="primary-btn" id="go" data-l="flip">Show answer</button>`
+      : `<button class="primary-btn" id="go" data-l="check" disabled>Check answer ${arrow}</button>`);
+  if (q.type === 'wordfill') setTimeout(() => document.getElementById('wf')?.focus(), 350);
   if (listen) setTimeout(() => speak(q.listen, tts()), 300);
 }
 
@@ -124,22 +132,26 @@ function setGo(text, cls = '') {
 function resolve(ok, answerText, el) {
   const q = L.queue[L.idx];
   L.checked = true;
+  if (!L.answered.has(q._i)) { L.answered.add(q._i); L.cb.onAnswer?.(q, ok); }
   if (ok) {
     L.solved++; L.combo++; L.bestCombo = Math.max(L.bestCombo, L.combo);
     if (!L.missed.has(q._i)) L.firstTry++;
     if (L.combo >= 3) sfx.combo(L.combo); else sfx.good();
+    if (L.combo === 3 || L.combo === 6) bitSay(`Beep! ${L.combo} in a row!`); else if (Math.random() < 0.35) hanaSay(pickOne(CHEERS));
     burst(el || document.getElementById('qcard'));
   } else {
     L.combo = 0; L.wrong++; L.missed.add(q._i);
     L.queue.push(q);
     sfx.bad();
     document.getElementById('qcard')?.classList.add('bad');
+    hanaSay('Not quite.');
   }
   const bar = document.querySelector('.lsn-prog i'); const pct = Math.round((L.solved / L.total) * 100);
   if (bar) { bar.style.width = `${pct}%`; document.querySelector('.lsn-prog em').textContent = `${pct}%`; }
   const lines = [];
   if (!ok && answerText) lines.push(`Correct answer: <b${langAttr(q.native)}>${esc(answerText)}</b>`);
   if (q.explain) lines.push(esc(q.explain));
+  if (L.note) { lines.push(esc(L.note)); L.note = null; }
   if (ok && L.combo >= 3) lines.push(`🔥 ${L.combo} in a row!`);
   document.getElementById('fb').innerHTML = `<div class="feedback ${ok ? 'ok' : 'no'}">${mascot(ok ? 'cheer' : 'sad', 64)}
     <div><b>${ok ? pickOne(CHEERS) : 'Not quite.'}</b>${lines.map((x) => `<p>${x}</p>`).join('')}${ok ? '' : '<p class="fb-small">This one will come back later.</p>'}</div></div>`;
@@ -197,6 +209,12 @@ document.addEventListener('click', (e) => {
   if (d.l === 'menu') { S.sound = !S.sound; save(); return toast(`Sound effects ${S.sound ? 'on' : 'off'}`); }
   if (d.l === 'begin') { L.phase = 'quiz'; sfx.tap(); return renderQ(); }
   if (d.l === 'next') return next();
+  if (d.l === 'flip' && !L.flipped) {
+    L.flipped = true; document.getElementById('flash')?.classList.add('flipped'); sfx.tap();
+    document.querySelector('.lsn-foot').innerHTML = `<div class="flash-rate"><button class="rate no" data-l="rate-no">Not yet</button><button class="rate ok" data-l="rate-ok">Got it</button></div>`;
+    return;
+  }
+  if ((d.l === 'rate-ok' || d.l === 'rate-no') && !L.checked) return resolve(d.l === 'rate-ok', '', t);
   if (d.l === 'check' && !L.checked) {
     const q = L.queue[L.idx];
     if (q.type === 'build') {
@@ -204,6 +222,20 @@ document.addEventListener('click', (e) => {
       document.querySelectorAll('#built .tile').forEach((b) => b.classList.add(ok ? 'right' : 'wrong'));
       document.querySelectorAll('[data-tile]').forEach((b) => { b.disabled = true; });
       return resolve(ok, q.answer.join(j), document.getElementById('built'));
+    }
+    if (q.type === 'toggle') {
+      if (L.tsel.filter((x) => x !== undefined).length < q.rows.length) return;
+      let ok = true;
+      q.rows.forEach((r, ri) => {
+        const good = L.tsel[ri] === r.answer; if (!good) ok = false;
+        document.querySelectorAll(`[data-tg^="${ri}:"]`).forEach((b) => { b.disabled = true; const k = +b.dataset.tg.split(':')[1]; if (k === r.answer) b.classList.add('right'); else if (k === L.tsel[ri]) b.classList.add('wrong'); });
+      });
+      return resolve(ok, q.rows.map((r) => r.options[r.answer]).join(', '));
+    }
+    if (q.type === 'wordfill') {
+      const inp = document.getElementById('wf'); const res = gradeTyped(inp.value, q.answer);
+      inp.disabled = true; inp.classList.add(res.ok ? 'right' : 'wrong'); L.note = res.note;
+      return resolve(res.ok, q.answer, inp);
     }
     if (L.sel === null) return;
     const ok = L.sel === q.answer;
@@ -223,10 +255,37 @@ document.addEventListener('click', (e) => {
     if (q.options[L.sel].speak) speak(q.options[L.sel].speak, tts());
     return;
   }
+  if (d.tg) {
+    const [ri, k] = d.tg.split(':').map(Number); L.tsel[ri] = k; sfx.tap();
+    document.querySelectorAll(`[data-tg^="${ri}:"]`).forEach((b) => b.classList.toggle('sel', b === t));
+    document.getElementById('go').disabled = L.tsel.filter((x) => x !== undefined).length < q.rows.length;
+    return;
+  }
   if (d.tile !== undefined) { if (!L.built.includes(+d.tile)) { L.built.push(+d.tile); sfx.tap(); updateBuilt(); } return; }
   if (d.unbuild !== undefined) { L.built.splice(+d.unbuild, 1); sfx.tap(); updateBuilt(); return; }
   if (d.ml !== undefined || d.mr !== undefined) return matchTap(t, d);
 });
+
+document.addEventListener('input', (e) => {
+  if (!L || e.target.id !== 'wf') return;
+  const g = document.getElementById('go'); if (g) g.disabled = !e.target.value.trim();
+});
+
+// Typed answers: ignore case, punctuation and extra spaces; accept missing accents and one small typo (with a note).
+const norm = (x) => x.toLowerCase().replace(/[.,!?;:'"’()]/g, '').replace(/\s+/g, ' ').trim();
+const bare = (x) => norm(x).normalize('NFD').replace(/\p{M}/gu, '');
+function lev(a, b) {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[a.length][b.length];
+}
+export function gradeTyped(given, answer) {
+  if (norm(given) === norm(answer)) return { ok: true };
+  if (bare(given) === bare(answer)) return { ok: true, note: `Watch the accents: ${answer}` };
+  if (bare(answer).length >= 5 && lev(bare(given), bare(answer)) <= 1) return { ok: true, note: `Nearly perfect spelling: ${answer}` };
+  return { ok: false };
+}
 
 document.addEventListener('keydown', (e) => {
   if (!L || document.querySelector('.sheet-back')) return;

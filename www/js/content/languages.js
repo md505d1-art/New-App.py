@@ -1,4 +1,4 @@
-// 33 languages sharing one beginner word list. Each `w` string has 40 entries in WORDS order.
+// Languages sharing one beginner word list. Each `w` string has 40 entries in WORDS order.
 // Non-Latin scripts are written "native (romanisation)".
 
 export const WORDS = [
@@ -62,7 +62,13 @@ export const LANGS = [
   { code: 'pl', name: 'Polish', native: 'Polski', flag: '🇵🇱', tts: 'pl-PL',
     w: 'cześć|do widzenia|dziękuję|proszę|tak|nie|dzień dobry|dobranoc|woda|chleb|jabłko|mleko|ser|kawa|jajko|herbata|kot|pies|ptak|ryba|koń|krowa|świnia|owca|matka|ojciec|brat|siostra|babcia|dziadek|przyjaciel|rodzina|jeden|dwa|trzy|cztery|pięć|sześć|siedem|osiem' },
   { code: 'cs', name: 'Czech', native: 'Čeština', flag: '🇨🇿', tts: 'cs-CZ',
-    w: 'ahoj|na shledanou|děkuji|prosím|ano|ne|dobré ráno|dobrou noc|voda|chléb|jablko|mléko|sýr|káva|vejce|čaj|kočka|pes|pták|ryba|kůň|kráva|prase|ovce|matka|otec|bratr|sestra|babička|dědeček|přítel|rodina|jedna|dva|tři|čtyři|pět|šest|sedm|osm' },
+    w: 'ahoj|na shledanou|děkuji|prosím|ano|ne|dobré ráno|dobrou noc|voda|chléb|jablko|mléko|sýr|káva|vejce|čaj|kočka|pes|pták|ryba|kůň|kráva|prase|ovce|matka|otec|bratr|sestra|babička|dědeček|přítel|rodina|jedna|dva|tři|čtyři|pět|šest|sedm|osm',
+    phrases: [
+      [['hello, thank you', 'ahoj děkuji'], ['yes, please', 'ano prosím']],
+      [['I drink water', 'piju vodu'], ['I eat bread', 'jím chléb']],
+      [['the cat drinks milk', 'kočka pije mléko'], ['I have a dog', 'mám psa']],
+      [['I have a sister', 'mám sestru'], ['my family is big', 'moje rodina je velká']],
+    ] },
   { code: 'hr', name: 'Croatian', native: 'Hrvatski', flag: '🇭🇷', tts: 'hr-HR',
     w: 'bok|doviđenja|hvala|molim|da|ne|dobro jutro|laku noć|voda|kruh|jabuka|mlijeko|sir|kava|jaje|čaj|mačka|pas|ptica|riba|konj|krava|svinja|ovca|majka|otac|brat|sestra|baka|djed|prijatelj|obitelj|jedan|dva|tri|četiri|pet|šest|sedam|osam' },
   { code: 'ro', name: 'Romanian', native: 'Română', flag: '🇷🇴', tts: 'ro-RO',
@@ -83,6 +89,8 @@ export const LANGS = [
     w: "שלום (shalom)|להתראות (lehitra'ot)|תודה (toda)|בבקשה (bevakasha)|כן (ken)|לא (lo)|בוקר טוב (boker tov)|לילה טוב (laila tov)|מים (mayim)|לחם (lechem)|תפוח (tapuach)|חלב (chalav)|גבינה (gvina)|קפה (kafe)|ביצה (beitza)|תה (te)|חתול (chatul)|כלב (kelev)|ציפור (tzipor)|דג (dag)|סוס (sus)|פרה (para)|חזיר (chazir)|כבשה (kivsa)|אמא (ima)|אבא (aba)|אח (ach)|אחות (achot)|סבתא (savta)|סבא (saba)|חבר (chaver)|משפחה (mishpacha)|אחת (achat)|שתיים (shtayim)|שלוש (shalosh)|ארבע (arba)|חמש (chamesh)|שש (shesh)|שבע (sheva)|שמונה (shmone)" },
   { code: 'fa', name: 'Persian', native: 'فارسی', flag: '🇮🇷', tts: 'fa-IR', rtl: true,
     w: 'سلام (salam)|خداحافظ (khodahafez)|ممنون (mamnun)|لطفا (lotfan)|بله (bale)|نه (na)|صبح بخیر (sobh bekheir)|شب بخیر (shab bekheir)|آب (ab)|نان (nan)|سیب (sib)|شیر (shir)|پنیر (panir)|قهوه (qahve)|تخم مرغ (tokhm-e morgh)|چای (chay)|گربه (gorbe)|سگ (sag)|پرنده (parande)|ماهی (mahi)|اسب (asb)|گاو (gav)|خوک (khuk)|گوسفند (gusfand)|مادر (madar)|پدر (pedar)|برادر (baradar)|خواهر (khahar)|مادربزرگ (madarbozorg)|پدربزرگ (pedarbozorg)|دوست (dust)|خانواده (khanevade)|یک (yek)|دو (do)|سه (se)|چهار (chahar)|پنج (panj)|شش (shesh)|هفت (haft)|هشت (hasht)' },
+  { code: 'ur', name: 'Urdu', native: 'اردو', flag: '🇵🇰', tts: 'ur-PK', rtl: true,
+    w: 'سلام (salaam)|خدا حافظ (khuda hafiz)|شکریہ (shukriya)|براہ کرم (barah-e-karam)|ہاں (haan)|نہیں (nahin)|صبح بخیر (subah bakhair)|شب بخیر (shab bakhair)|پانی (paani)|روٹی (roti)|سیب (saib)|دودھ (doodh)|پنیر (paneer)|کافی (kaafi)|انڈا (anda)|چائے (chaaye)|بلی (billi)|کتا (kutta)|پرندہ (parinda)|مچھلی (machhli)|گھوڑا (ghora)|گائے (gaaye)|سور (suar)|بھیڑ (bhair)|ماں (maan)|والد (waalid)|بھائی (bhai)|بہن (behan)|دادی (daadi)|دادا (daada)|دوست (dost)|خاندان (khaandaan)|ایک (aik)|دو (do)|تین (teen)|چار (chaar)|پانچ (paanch)|چھ (chhe)|سات (saat)|آٹھ (aath)' },
   { code: 'hi', name: 'Hindi', native: 'हिन्दी', flag: '🇮🇳', tts: 'hi-IN',
     w: 'नमस्ते (namaste)|अलविदा (alvida)|धन्यवाद (dhanyavaad)|कृपया (kripya)|हाँ (haan)|नहीं (nahin)|सुप्रभात (suprabhaat)|शुभ रात्रि (shubh raatri)|पानी (paani)|रोटी (roti)|सेब (seb)|दूध (doodh)|पनीर (paneer)|कॉफ़ी (kofi)|अंडा (anda)|चाय (chai)|बिल्ली (billi)|कुत्ता (kutta)|चिड़िया (chidiya)|मछली (machhli)|घोड़ा (ghoda)|गाय (gaay)|सूअर (suar)|भेड़ (bhed)|माँ (maa)|पिता (pita)|भाई (bhai)|बहन (behen)|दादी (daadi)|दादा (daada)|दोस्त (dost)|परिवार (parivaar)|एक (ek)|दो (do)|तीन (teen)|चार (chaar)|पाँच (paanch)|छह (chhah)|सात (saat)|आठ (aath)' },
   { code: 'ja', name: 'Japanese', native: '日本語', flag: '🇯🇵', tts: 'ja-JP',

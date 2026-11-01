@@ -1,5 +1,9 @@
-import { COURSES, CATEGORIES, gambitStart, GAMBITS } from './courses.js';
-import { mascot } from './mascot.js';
+import { COURSES, CATEGORIES, gambitStart, GAMBITS, GCSE_MFL } from './courses.js';
+import { avatarSVG, AV_OPTIONS, AV_LABELS, DEFAULT_AVATAR, randomAvatar } from './avatar.js';
+import { hanaSay, bitSay, hanaRandom, bitRandom } from './voice.js';
+import { learnLesson, recordAnswer, dueCount, buildReview, memoryScore } from './srs.js';
+import { showReview } from './review.js';
+import { mascot, bitIcon } from './mascot.js';
 import { badge, icon, thumb, medal, sun, plant, col } from './art.js';
 import { S, save, reset, addXP, addTime, streakAlive, today, dayOffset, esc, sfx, burst, countUp, toast } from './store.js';
 import { startLesson } from './lesson.js';
@@ -9,6 +13,10 @@ const $app = document.getElementById('app');
 let openCourse = null;
 let lastKey = '';
 let period = 'week';
+let openAvatar = false; let avTab = 'hair'; let draftAv = null; let lastGame = null;
+const myAvatar = (size) => avatarSVG(S.avatar || DEFAULT_AVATAR, size);
+const glyphOf = (c) => c.flag || c.glyph;
+const boardPills = (c) => (c.boards ? `<span class="boards">${c.boards.map((b) => `<i class="bp-${b.toLowerCase()}">${b}</i>`).join('')}</span>` : '');
 
 /* ================= Helpers ================= */
 const lessonsOf = (c) => c.units.flatMap((u, ui) => u.lessons.map((l, li) => ({ ...l, ui, li, unit: u })));
@@ -35,6 +43,7 @@ const TABS = [
 
 function render() {
   if (!S.onboarded) return renderOnboarding();
+  if (openAvatar) return renderAvatarBuilder();
   const key = openCourse ? `course:${openCourse}` : `tab:${S.tab}`;
   const screens = { home: homeScreen, explore: exploreScreen, progress: progressScreen, profile: profileScreen };
   const body = openCourse ? courseScreen(COURSES[openCourse]) : (screens[S.tab] || homeScreen)();
@@ -69,6 +78,18 @@ function renderOnboarding() {
 function greeting() { const h = new Date().getHours(); return h < 12 ? 'Good morning,' : h < 18 ? 'Good afternoon,' : 'Good evening,'; }
 function weekDays() { const d = new Date(); const back = (d.getDay() + 6) % 7; return [...Array(7)].map((_, k) => dayOffset(k - back)); }
 
+function hanaLine() {
+  const due = dueCount(); const s = streakAlive() ? S.streak : 0;
+  if (due) return `You have ${due} fact${due === 1 ? '' : 's'} ready to revise. Let's keep them fresh!`;
+  if (s >= 3) return `${s} days in a row! Bit is doing a happy dance.`;
+  return 'Pick up where you left off, or try something new today.';
+}
+function reviewCard() {
+  const learned = Object.keys(S.mem || {}).length; if (!learned) return '';
+  const due = dueCount();
+  return `<button class="revise-card rise" style="--i:2" data-act="revise">${bitIcon(54)}<span class="rv-txt"><b>Smart revise</b><small>${due ? `${due} fact${due === 1 ? '' : 's'} due today` : 'All caught up. Practise your weakest facts.'}</small></span><span class="start-pill">${due ? 'Revise' : 'Practise'}</span></button>`;
+}
+
 function homeScreen() {
   const t = today(); const streak = streakAlive() ? S.streak : 0;
   const cont = S.course && COURSES[S.course] ? COURSES[S.course] : started()[0];
@@ -81,7 +102,7 @@ function homeScreen() {
     <header class="home-head">
       <div><p class="hello">${greeting()}${S.name ? ` ${esc(S.name)}` : ''}</p><h1 class="headline">${streak ? 'Keep going!' : 'Let\'s begin!'} ${sun(36)}</h1>
         <p class="lead">A little progress each day leads to big results.</p></div>
-      <button class="avatar-btn" data-tab="profile" aria-label="Profile">${mascot('happy', 58)}</button>
+      <button class="avatar-btn" data-tab="profile" aria-label="Your profile">${myAvatar(60)}</button>
     </header>
 
     <section class="streak-card rise" style="--i:1">
@@ -91,9 +112,13 @@ function homeScreen() {
       <p>${streak > 1 ? `Awesome! You've been learning for ${streak} days in a row.` : streak === 1 ? 'Great start! Come back tomorrow to grow your streak.' : 'Finish a lesson today to start your streak.'}</p>
     </section>
 
+    <section class="hana-card rise" style="--i:1">${mascot('happy', 92)}<div class="hc-bubble"><b>Hana</b><p>${esc(hanaLine())}</p><small>Tap me or Bit to chat</small></div></section>
+
+    ${reviewCard()}
+
     <div class="sec-row rise" style="--i:2"><h2>Continue learning</h2><button class="see-all" data-tab="explore">See all ${arrow}</button></div>
     ${cont ? `<button class="continue-card rise" style="--i:2;${cv(cont.color)}" data-open="${cont.id}">
-        <span class="cc-thumb">${thumb(cont.color)}${cont.flag ? `<span class="cc-flag">${cont.flag}</span>` : ''}</span>
+        <span class="cc-thumb">${thumb(cont.color)}${glyphOf(cont) ? `<span class="cc-flag">${glyphOf(cont)}</span>` : ''}</span>
         <span class="cc-body"><b>${esc(cont.name)}</b><small>${nl ? `Lesson ${ls.indexOf(ls.find((x) => x.id === nl.id)) + 1} of ${ls.length}` : 'All lessons done'}</small>
           <span class="cc-prog"><span class="bar"><i style="width:${p.pct * 100}%"></i></span><em>${Math.round(p.pct * 100)}%</em></span></span>
         <span class="round-btn">${chev}</span></button>`
@@ -101,7 +126,7 @@ function homeScreen() {
 
     <div class="sec-row rise" style="--i:3"><h2>Explore new topics</h2><button class="see-all" data-tab="explore">See all ${arrow}</button></div>
     <div class="topics rise" style="--i:3">${picks.map((c, i) => `<button class="topic" data-open="${c.id}" style="${cv(c.color)};--i:${i}">
-        <span class="topic-ic">${c.flag ? `<span class="flag-badge">${c.flag}</span>` : icon(c.icon, c.color, 30)}</span><b>${esc(c.name)}</b><small>${lessonsOf(c).length} lessons</small></button>`).join('')}</div>
+        <span class="topic-ic">${glyphOf(c) ? `<span class="flag-badge">${glyphOf(c)}</span>` : icon(c.icon, c.color, 30)}</span><b>${esc(c.name)}</b><small>${lessonsOf(c).length} lessons</small></button>`).join('')}</div>
 
     <div class="sec-row rise" style="--i:4"><h2>Today's habits</h2><button class="see-all" data-act="addhabit">+ Add</button></div>
     <section class="list-card rise" style="--i:4">
@@ -116,6 +141,14 @@ function homeScreen() {
 }
 
 /* ================= Explore ================= */
+function mflSection() {
+  const list = GCSE_MFL.filter((m) => S.board === 'all' || m.boards.includes(S.board));
+  return `<div class="sec-row sub"><h2>GCSE languages</h2><span class="muted small">Opens the matching language course</span></div>
+    <div class="topics grid">${list.map((m) => { const id = m.course || (m.code ? `lang:${m.code}` : null); const c = id && COURSES[id];
+      return `<button class="topic ${c ? '' : 'soon'}" ${c ? `data-open="${id}"` : 'disabled'} data-name="${esc(`${m.name} gcse`.toLowerCase())}" style="${cv(c ? c.color : 'purple')}">
+        <span class="topic-ic">${c ? (glyphOf(c) ? `<span class="flag-badge">${glyphOf(c)}</span>` : icon(c.icon, c.color, 30)) : '<span class="flag-badge">🗣️</span>'}</span><b>${esc(m.name)}</b><small>${c ? 'GCSE language' : 'Course coming soon'}</small>${boardPills(m)}</button>`; }).join('')}</div>`;
+}
+
 function exploreScreen() {
   const cats = S.lib === 'all' ? CATEGORIES : CATEGORIES.filter((c) => c.id === S.lib);
   return `<div class="explore">
@@ -124,9 +157,11 @@ function exploreScreen() {
       <input id="lib-q" type="search" placeholder="Search subjects and languages" autocomplete="off" aria-label="Search courses"></label>
     <div class="seg-tabs">${[['all', 'All'], ...CATEGORIES.map((c) => [c.id, c.name])].map(([id, n]) => `<button class="${S.lib === id ? 'on' : ''}" data-lib="${id}">${n}</button>`).join('')}</div>
     ${cats.map((cat) => `<section class="cat" data-cat="${cat.id}"><div class="sec-row"><h2>${cat.name}</h2><span class="muted small">${cat.blurb}</span></div>
-      <div class="topics grid">${Object.values(COURSES).filter((c) => c.cat === cat.id).map((c, i) => { const p = progressOf(c); return `<button class="topic" data-open="${c.id}" data-name="${esc(`${c.name} ${c.sub || ''}`.toLowerCase())}" style="${cv(c.color)};--i:${Math.min(i, 12)}">
-        <span class="topic-ic">${c.flag ? `<span class="flag-badge">${c.flag}</span>` : icon(c.icon, c.color, 30)}</span><b>${esc(c.name)}</b><small>${p.done ? `${p.done} of ${p.total} lessons` : `${p.total} lessons`}</small>
-        ${p.done ? `<span class="bar thin"><i style="width:${p.pct * 100}%"></i></span>` : ''}</button>`; }).join('')}</div></section>`).join('')}
+      ${cat.id === 'school' ? `<div class="board-row"><span class="muted small">Exam board</span><div class="seg-tabs small">${['all', 'AQA', 'Edexcel', 'Eduqas'].map((b) => `<button class="${S.board === b ? 'on' : ''}" data-board="${b}">${b === 'all' ? 'All' : b}</button>`).join('')}</div></div>` : ''}
+      <div class="topics grid">${Object.values(COURSES).filter((c) => c.cat === cat.id && (cat.id !== 'school' || S.board === 'all' || c.boards?.includes(S.board))).map((c, i) => { const p = progressOf(c); return `<button class="topic" data-open="${c.id}" data-name="${esc(`${c.name} ${c.sub || ''}`.toLowerCase())}" style="${cv(c.color)};--i:${Math.min(i, 12)}">
+        <span class="topic-ic">${glyphOf(c) ? `<span class="flag-badge">${glyphOf(c)}</span>` : icon(c.icon, c.color, 30)}</span><b>${esc(c.name)}</b><small>${p.done ? `${p.done} of ${p.total} lessons` : `${p.total} lessons`}</small>
+        ${c.cat === 'school' ? boardPills(c) : ''}${p.done ? `<span class="bar thin"><i style="width:${p.pct * 100}%"></i></span>` : ''}</button>`; }).join('')}</div>
+      ${cat.id === 'school' ? mflSection() : ''}</section>`).join('')}
     <p class="muted empty-search" id="no-results" hidden>No courses match that search.</p>
   </div>`;
 }
@@ -138,6 +173,7 @@ function lessonMeta(l) {
   if (l.words) return l.words.map((w) => w.t).join(', ');
   if (l.qs) return `${l.qs.length + 2} questions · ${l.terms.length} key terms`;
   if (l.items) return `${l.items.length} key events`;
+  if (l.signs) return l.signs.map((x) => x.word).join(', ');
   return '';
 }
 
@@ -148,8 +184,8 @@ function courseScreen(c) {
     <header class="bar-head"><button class="nav-ic" data-act="back" aria-label="Back"><svg viewBox="0 0 24 24" width="24" height="24"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       <b>${esc(CATEGORIES.find((x) => x.id === c.cat)?.name || '')}</b><span class="nav-ic ghost"></span></header>
     <section class="course-hero rise">
-      <div class="ch-art">${thumb(c.color)}${c.flag ? `<span class="cc-flag big">${c.flag}</span>` : `<span class="ch-ico">${badge(c, 54)}</span>`}</div>
-      <div class="ch-text"><h1>${esc(c.name)}</h1><p>${esc(c.sub || '')}</p>
+      <div class="ch-art">${thumb(c.color)}${glyphOf(c) ? `<span class="cc-flag big">${glyphOf(c)}</span>` : `<span class="ch-ico">${badge(c, 54)}</span>`}</div>
+      <div class="ch-text"><h1>${esc(c.name)}</h1><p>${esc(c.sub || '')}</p>${boardPills(c)}${memoryScore(c) != null ? `<span class="mem-chip">🧠 Memory ${memoryScore(c)}%</span>` : ''}
         <span class="cc-prog"><span class="bar"><i style="width:${p.pct * 100}%"></i></span><em>${p.done}/${p.total}</em></span></div>
     </section>
     ${c.note ? `<p class="note">${esc(c.note)}</p>` : ''}
@@ -231,9 +267,10 @@ function profileScreen() {
     ['📚', 'Bookworm', 'Finish a book', S.books.some((b) => b.status === 'done')], ['🌳', 'Evergreen', '1,000 XP', S.xp >= 1000],
   ];
   return `<div class="profile">
-    <section class="profile-card rise"><div class="pc-hana">${mascot('wave', 132)}</div>
+    <section class="profile-card rise"><div class="pc-av">${myAvatar(108)}</div>
       <div class="pc-text"><h1>${esc(S.name || 'Your profile')}</h1><p>${started().length} courses · ${Object.keys(S.done).length} lessons</p>
-        <div class="chips"><span>🔥 ${streakAlive() ? S.streak : 0} day streak</span><span>⚡ ${S.xp} XP</span><span>🌱 ${S.seeds} seeds</span></div></div></section>
+        <div class="chips"><span>🔥 ${streakAlive() ? S.streak : 0} day streak</span><span>⚡ ${S.xp} XP</span><span>🌱 ${S.seeds} seeds</span></div>
+        <button class="edit-av" data-act="avatar">✏️ Edit your character</button></div></section>
     <div class="sec-row rise" style="--i:1"><h2>Badges</h2></div>
     <div class="badges rise" style="--i:1">${badges.map(([e, n, d, ok]) => `<div class="bdg ${ok ? 'got' : ''}"><span>${e}</span><b>${n}</b><small>${d}</small></div>`).join('')}</div>
     <div class="sec-row rise" style="--i:2"><h2>Bookshelf</h2><button class="see-all" data-act="addbook">+ Add book</button></div>
@@ -245,7 +282,10 @@ function profileScreen() {
     <section class="list-card settings rise" style="--i:3">
       <label class="set-row" for="set-name"><span>Your name</span><input id="set-name" maxlength="24" placeholder="Optional" value="${esc(S.name)}"></label>
       <div class="set-row"><span>Daily goal</span><div class="seg-tabs small">${[10, 20, 30, 50].map((g) => `<button class="${S.dailyGoal === g ? 'on' : ''}" data-goal="${g}">${g} XP</button>`).join('')}</div></div>
+      <div class="set-row"><span>Exam board</span><div class="seg-tabs small">${['all', 'AQA', 'Edexcel', 'Eduqas'].map((b) => `<button class="${S.board === b ? 'on' : ''}" data-board="${b}">${b === 'all' ? 'All' : b}</button>`).join('')}</div></div>
       <button class="set-row" data-act="sound"><span>Sound effects</span><b>${S.sound ? 'On' : 'Off'}</b></button>
+      <button class="set-row" data-act="voice"><span>Hana and Bit's voices</span><b>${S.voice ? 'On' : 'Off'}</b></button>
+      <div class="set-row"><span>Offline learning</span><b class="${navigator.onLine ? '' : 'off'}" id="offline-state">${offlineText()}</b></div>
       ${installPrompt ? '<button class="set-row" data-act="install"><span>Install Sprout</span><b>Add to home screen</b></button>' : ''}
       <button class="set-row danger" data-act="reset"><span>Reset all progress</span></button>
     </section>
@@ -303,13 +343,15 @@ function begin(courseId, lessonId) {
     return startGame({ fen: g.fen, side: g.side, level: l.play.level, title: g.name, idea: g.idea, prefix: g.moves, lessonId: l.id,
       intro: `Let's play the <b>${esc(g.name)}</b>. You're ${g.side === 'w' ? 'White' : 'Black'}.<br><small>${esc(g.idea)}</small>` }, gameCallbacks);
   }
-  startLesson(c, l, { onDone: (r) => lessonDone(c, l, r), onQuit: quitter, index: ls.indexOf(l) + 1, count: ls.length });
+  startLesson(c, l, { onDone: (r) => lessonDone(c, l, r), onQuit: quitter, onAnswer: (q, ok) => q.fact && S.mem?.[q.fact] && recordAnswer(q.fact, ok), index: ls.indexOf(l) + 1, count: ls.length });
 }
 function nextAfter(c, id) { const ls = lessonsOf(c); const i = ls.findIndex((x) => x.id === id); return ls[i + 1] || null; }
 
 function lessonDone(c, l, r) {
   const first = !S.done[l.id];
   S.done[l.id] = Math.max(starsOf(l.id), r.stars);
+  learnLesson(c, l);
+  hanaSay(r.stars === 3 ? 'Perfect lesson! Amazing!' : 'Lesson complete! Great work.');
   const xp = 10 + r.stars * 2 + (r.bestCombo >= 5 ? 5 : 0); const seeds = first ? 5 + r.stars : 1;
   S.seeds += seeds; addXP(xp); addTime(r.secs); sfx.win();
   const nx = nextAfter(c, l.id);
@@ -333,7 +375,7 @@ function results({ title, sub = '', stars = 0, color = 'purple', stats, buttons,
 }
 
 const gameCallbacks = {
-  seeds: () => S.seeds, sfx,
+  seeds: () => S.seeds, sfx, avatar: (size) => myAvatar(size), name: () => S.name || 'You',
   spendSeeds(n) { if (S.seeds < n) { toast('Not enough seeds. Finish lessons or win games to earn more.'); return false; } S.seeds -= n; save(); return true; },
   onQuit: quitter, onFinish: gameDone,
 };
@@ -350,25 +392,73 @@ function gameDone(r) {
   S.games.unshift({ date: new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'short' }), title: r.title, result: r.result, accuracy: r.accuracy, level: r.level, worst: r.worst });
   S.games = S.games.slice(0, 20);
   S.seeds += seeds; addXP(xp); addTime(r.secs);
+  lastGame = r;
   if (pass) sfx.win(); else sfx.bad();
   const nx = r.lessonId ? nextAfter(COURSES.chess, r.lessonId) : null;
   results({ title: r.result === 'win' ? 'You won!' : r.result === 'draw' ? 'It\'s a draw!' : 'Hana won this one', sub: `${esc(r.how)} · ${r.moves} moves`, good: pass, color: pass ? 'green' : 'red',
     stats: [['⚡', 'XP earned', xp, ''], ['🎯', 'Accuracy', r.accuracy, '%'], ['🌱', 'Seeds', seeds, '']],
     note: r.worst ? `<p class="review-note">Watch out for <span class="mono">${esc(r.worst.move)}${esc(r.worst.san)}</span> (${esc(r.worst.label)})${r.worst.best ? `. <span class="mono">${esc(r.worst.best)}</span> was better.` : '.'}</p>` : '',
     buttons: [
-      r.lessonId && !pass ? `<button class="primary-btn" data-start-next="chess|${r.lessonId}">Try again ${arrow}</button>` : '',
-      r.lessonId && pass && nx ? `<button class="primary-btn" data-start-next="chess|${nx.id}">Next game ${arrow}</button>` : '',
-      !r.lessonId ? `<button class="primary-btn" data-free="${r.level}">Play again ${arrow}</button>` : '',
+      `<button class="primary-btn review-btn" data-act="game-review">🔍 Game review</button>`,
+      r.lessonId && !pass ? `<button class="primary-btn ghost-btn" data-start-next="chess|${r.lessonId}">Try again ${arrow}</button>` : '',
+      r.lessonId && pass && nx ? `<button class="primary-btn ghost-btn" data-start-next="chess|${nx.id}">Next game ${arrow}</button>` : '',
+      !r.lessonId ? `<button class="primary-btn ghost-btn" data-free="${r.level}">Play again ${arrow}</button>` : '',
       `<button class="text-btn" data-act="${r.lessonId ? 'to-course' : 'home'}" data-course="chess">Continue</button>`] });
 }
+
+/* ================= Character creator ================= */
+function renderAvatarBuilder() {
+  const opts = AV_OPTIONS[avTab]; const isColor = /color|skin|eyes|bg/i.test(avTab);
+  $app.innerHTML = `<div class="avb">
+    <header class="bar-head"><button class="nav-ic" data-act="av-cancel" aria-label="Cancel">✕</button><b>Your character</b><button class="text-link" data-act="av-save">Save</button></header>
+    <div class="avb-preview">${avatarSVG(draftAv, 200)}<button class="dice" data-act="av-random" aria-label="Random character">🎲 Surprise me</button></div>
+    <div class="avb-tabs">${Object.keys(AV_OPTIONS).map((k) => `<button class="${avTab === k ? 'on' : ''}" data-avtab="${k}">${AV_LABELS[k]}</button>`).join('')}</div>
+    <div class="avb-grid ${isColor ? 'colors' : ''}">${opts.map((v, i) => isColor
+      ? `<button class="swatch ${draftAv[avTab] === i ? 'on' : ''}" data-av="${avTab}:${i}" style="background:${v}" aria-label="${AV_LABELS[avTab]} ${i + 1}"></button>`
+      : `<button class="av-opt ${draftAv[avTab] === i ? 'on' : ''}" data-av="${avTab}:${i}">${avatarSVG({ ...draftAv, [avTab]: i }, 72)}<small>${v}</small></button>`).join('')}</div>
+    <div class="avb-foot"><button class="primary-btn" data-act="av-save">Save character</button></div>
+  </div>`;
+}
+
+/* ================= Smart revise ================= */
+function startRevise() {
+  const r = buildReview(10);
+  if (!r) return toast('Finish a lesson first, then its facts appear here.');
+  bitSay('Beep! Smart revise mode activated.');
+  startLesson(r.course, r.lesson, { onDone: (res) => reviseDone(res, r), onQuit: quitter, onAnswer: (q, ok) => recordAnswer(q.fact, ok) });
+}
+function reviseDone(res, r) {
+  const xp = 5 + res.stars * 3; S.seeds += 3; addXP(xp); addTime(res.secs); sfx.win();
+  hanaSay('Revision done! Those facts will stick now.');
+  results({ title: 'Revision done!', sub: `${r.count} facts reviewed`, stars: res.stars, color: 'purple',
+    stats: [['⚡', 'XP earned', xp, ''], ['🎯', 'First try', res.accuracy, '%'], ['🧠', 'Still due', dueCount(), '']],
+    buttons: [dueCount() ? '<button class="primary-btn" data-act="revise">Keep revising</button>' : '', '<button class="text-btn" data-act="home">Back home</button>'] });
+}
+
+function offlineText() {
+  const sw = 'serviceWorker' in navigator && navigator.serviceWorker.controller;
+  if (!navigator.onLine) return 'Offline now, still working';
+  return sw || !location.protocol.startsWith('http') ? 'Ready ✓' : 'Ready after first visit';
+}
+window.addEventListener('online', () => { const el = document.getElementById('offline-state'); if (el) el.textContent = offlineText(); });
+window.addEventListener('offline', () => { const el = document.getElementById('offline-state'); if (el) el.textContent = offlineText(); toast('You\'re offline. Everything still works.'); });
 
 /* ================= Events ================= */
 let installPrompt = null;
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; });
 
 document.addEventListener('click', (e) => {
+  const who = e.target.closest('[data-hana], [data-bit]');
+  if (who && !e.target.closest('#cboard')) {
+    const box = who.closest('.mascot, .bit-solo'); box?.classList.remove('talk'); void box?.offsetWidth; box?.classList.add('talk');
+    if (who.dataset.bit) { bitSay(bitRandom()); toast(`Bit: ${bitRandom()}`); } else { const line = hanaRandom(); hanaSay(line); toast(`Hana: ${line}`); }
+    return;
+  }
   const t = e.target.closest('button'); if (!t) return;
   const d = t.dataset;
+  if (d.av !== undefined) { const [k, v] = d.av.split(':'); draftAv[k] = +v; sfx.tap(); return renderAvatarBuilder(); }
+  if (d.avtab) { avTab = d.avtab; return renderAvatarBuilder(); }
+  if (d.board) { S.board = d.board; save(); return render(); }
   if (d.ob) {
     S.onboarded = true;
     if (d.ob === 'habits') S.tab = 'home';
@@ -410,6 +500,13 @@ document.addEventListener('click', (e) => {
     case 'addhabit': return addHabitSheet();
     case 'addbook': return addBookSheet();
     case 'sound': S.sound = !S.sound; save(); return render();
+    case 'voice': S.voice = !S.voice; save(); if (S.voice) hanaSay('Hi! I can talk now.'); return render();
+    case 'avatar': openAvatar = true; draftAv = { ...(S.avatar || DEFAULT_AVATAR) }; avTab = 'hair'; return render();
+    case 'av-random': draftAv = randomAvatar(); sfx.pop(); return renderAvatarBuilder();
+    case 'av-save': S.avatar = { ...draftAv }; save(); openAvatar = false; sfx.win(); hanaSay('Looking great!'); toast('Character saved'); return render();
+    case 'av-cancel': openAvatar = false; return render();
+    case 'revise': return startRevise();
+    case 'game-review': if (lastGame) { const g = lastGame; showReview(g.record, { avatar: (sz) => myAvatar(sz), name: () => S.name || 'You', onBack: () => { openCourse = g.lessonId ? 'chess' : null; render(); } }); } return;
     case 'install': installPrompt?.prompt(); installPrompt = null; return;
     case 'reset': return confirmSheet('Reset all progress?', 'reset-yes');
     case 'reset-yes': reset(); openCourse = null; closeSheet(); return render();

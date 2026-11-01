@@ -1,8 +1,58 @@
-// Offline support: precache the app shell, then cache-first with background refresh.
-const CACHE = 'sprout-v4';
-const SHELL = ['./', 'index.html', 'css/style.css', 'js/app.js', 'js/store.js', 'js/courses.js', 'js/lesson.js', 'js/art.js',
-  'js/gambits.js', 'js/mascot.js', 'js/game.js', 'js/engine-worker.js', 'js/content/languages.js', 'js/content/gcse.js',
-  'vendor/chess.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
+// Offline support: everything the app needs is cached on install, so lessons, chess and
+// Hana all work with no connection. Cache-first, refreshed in the background when online.
+const CACHE = 'sprout-v5';
+const SHELL = [
+ "./",
+ "css/fonts.css",
+ "css/style.css",
+ "fonts/dmmono-latin-ext.woff2",
+ "fonts/dmmono-latin.woff2",
+ "fonts/plusjakartasans-latin-ext.woff2",
+ "fonts/plusjakartasans-latin.woff2",
+ "icons/apple-touch-icon.png",
+ "icons/icon-192.png",
+ "icons/icon-512.png",
+ "icons/icon-maskable-512.png",
+ "img/bit.webp",
+ "img/hana-annoyed.webp",
+ "img/hana-full.webp",
+ "img/hana-happy.webp",
+ "img/hana-think.webp",
+ "img/pieces/bb.svg",
+ "img/pieces/bk.svg",
+ "img/pieces/bn.svg",
+ "img/pieces/bp.svg",
+ "img/pieces/bq.svg",
+ "img/pieces/br.svg",
+ "img/pieces/wb.svg",
+ "img/pieces/wk.svg",
+ "img/pieces/wn.svg",
+ "img/pieces/wp.svg",
+ "img/pieces/wq.svg",
+ "img/pieces/wr.svg",
+ "index.html",
+ "js/app.js",
+ "js/art.js",
+ "js/avatar.js",
+ "js/chess-analysis.js",
+ "js/chess-sound.js",
+ "js/content/bsl.js",
+ "js/content/gcse-more.js",
+ "js/content/gcse.js",
+ "js/content/languages.js",
+ "js/courses.js",
+ "js/engine-worker.js",
+ "js/gambits.js",
+ "js/game.js",
+ "js/lesson.js",
+ "js/mascot.js",
+ "js/review.js",
+ "js/srs.js",
+ "js/store.js",
+ "js/voice.js",
+ "manifest.webmanifest",
+ "vendor/chess.js"
+];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -17,7 +67,7 @@ self.addEventListener('fetch', (e) => {
     const net = fetch(e.request).then((res) => {
       if (res.ok || res.type === 'opaque') cache.put(e.request, res.clone());
       return res;
-    }).catch(() => hit);
+    }).catch(() => hit || (e.request.mode === 'navigate' ? cache.match('index.html') : undefined));
     return hit || net;
   }));
 });

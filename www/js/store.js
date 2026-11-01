@@ -7,7 +7,7 @@ export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&a
 export const DEFAULT = {
   onboarded: false, tab: 'home', course: null, lib: 'all', name: '',
   xp: 0, seeds: 300, streak: 0, lastDay: null, xpByDay: {}, timeByDay: {}, done: {},
-  dailyGoal: 20, sound: true, wins: 0, perfect: false,
+  dailyGoal: 20, sound: true, voice: true, board: 'all', mem: {}, avatar: null, wins: 0, perfect: false,
   habits: [
     { id: 'h1', name: 'Drink water', emoji: '💧', color: 'blue', log: {} },
     { id: 'h2', name: 'Revise for 20 minutes', emoji: '📚', color: 'purple', log: {} },

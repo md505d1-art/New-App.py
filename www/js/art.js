@@ -66,8 +66,8 @@ export function icon(name, color = 'purple', size = 56, onSolid = false) {
 // Course badge: a pastel rounded square with the course icon (or flag).
 export function badge(course, size = 56) {
   const [, , pastel] = col(course.color);
-  const inner = course.flag
-    ? `<span class="flag-badge" style="font-size:${Math.round(size * 0.5)}px">${course.flag}</span>`
+  const inner = (course.flag || course.glyph)
+    ? `<span class="flag-badge" style="font-size:${Math.round(size * 0.5)}px">${course.flag || course.glyph}</span>`
     : icon(course.icon, course.color, Math.round(size * 0.58));
   return `<span class="badge-tile" style="background:${pastel};width:${size}px;height:${size}px">${inner}</span>`;
 }

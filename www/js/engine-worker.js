@@ -1,5 +1,6 @@
 // Small alpha-beta chess engine running in a Web Worker so the UI never freezes.
 // Messages in:  { id, type: 'best', fen, level }   -> { id, move: {from,to,promotion,san}, score }
+//               { id, type: 'eval', fen, ms }      -> { id, score, best }   (score for the side to move, centipawns)
 //               { id, type: 'grade', fen, move }   -> { id, loss, best: san }   (loss in centipawns for the mover)
 import { Chess } from '../vendor/chess.js';
 
@@ -101,6 +102,13 @@ self.onmessage = (e) => {
       .sort((a, b) => b.n - a.n);
     const best = scored[0];
     self.postMessage({ id, move: best ? { from: best.m.from, to: best.m.to, promotion: best.m.promotion, san: best.m.san } : null, score: best?.sc ?? 0 });
+  } else if (type === 'eval') {
+    // Score of the position for the side to move, and the best move (used for the eval bar and game review).
+    const moves = c.moves();
+    if (!moves.length) { self.postMessage({ id, score: c.inCheck() ? -MATE : 0, best: null, over: true }); return; }
+    const scored = think(c, e.data.depth || 3, 1, e.data.ms || 500) || [];
+    const b = scored[0];
+    self.postMessage({ id, score: b ? b.sc : 0, best: b ? { san: b.m.san, from: b.m.from, to: b.m.to, promotion: b.m.promotion } : null });
   } else if (type === 'grade') {
     // How much worse was the played move than the best one (2-ply + captures)?
     const scored = think(c, 2, 400, 1500) || [];
