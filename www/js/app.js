@@ -1,449 +1,368 @@
-import { COURSES, gambitStart } from './courses.js';
-import { startGame } from './game.js';
+import { COURSES, CATEGORIES, gambitStart, GAMBITS, movesText } from './courses.js';
 import { mascot } from './mascot.js';
+import { badge, homeScene, isNight, plant, waves, icon, COLORS } from './art.js';
+import { S, save, reset, addXP, streakAlive, today, dayOffset, esc, sfx, burst, countUp, toast } from './store.js';
+import { startLesson } from './lesson.js';
+import { startGame } from './game.js';
 
-/* ================= State ================= */
-const KEY = 'sprout.v1';
-const MAX_HEARTS = 5;
-const HEART_MS = 20 * 60 * 1000;
-const today = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-const dayOffset = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return today(d); };
-
-const DEFAULT = {
-  onboarded: false, course: 'chess', tab: 'learn',
-  xp: 0, gems: 500, hearts: MAX_HEARTS, heartsAt: Date.now(),
-  streak: 0, lastDay: null, xpByDay: {}, done: {}, chests: {},
-  dailyGoal: 20, sound: true,
-  habits: [
-    { id: 'h1', name: 'Drink water', emoji: '💧', color: 'blue', log: {} },
-    { id: 'h2', name: 'Read 10 pages', emoji: '📚', color: 'purple', log: {} },
-    { id: 'h3', name: 'Stretch', emoji: '🧘', color: 'green', log: {} },
-  ],
-};
-let S;
-try { S = { ...DEFAULT, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch { S = { ...DEFAULT }; }
-const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch { /* storage unavailable */ } };
-
-function regenHearts() {
-  if (S.hearts >= MAX_HEARTS) { S.heartsAt = Date.now(); return; }
-  const gained = Math.floor((Date.now() - S.heartsAt) / HEART_MS);
-  if (gained > 0) { S.hearts = Math.min(MAX_HEARTS, S.hearts + gained); S.heartsAt += gained * HEART_MS; }
-}
-function streakAlive() { return S.lastDay === today() || S.lastDay === dayOffset(-1); }
-function addXP(n) {
-  S.xp += n;
-  S.xpByDay[today()] = (S.xpByDay[today()] || 0) + n;
-  if (S.lastDay !== today()) { S.streak = S.lastDay === dayOffset(-1) ? S.streak + 1 : 1; S.lastDay = today(); }
-  save();
-}
-
-/* ================= Sound & haptics ================= */
-let AC;
-function tone(notes) {
-  if (!S.sound) return;
-  try {
-    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
-    let t = AC.currentTime;
-    for (const [f, d, type = 'sine'] of notes) {
-      const o = AC.createOscillator(); const g = AC.createGain();
-      o.type = type; o.frequency.value = f; o.connect(g); g.connect(AC.destination);
-      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.18, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
-      o.start(t); o.stop(t + d + 0.02); t += d * 0.8;
-    }
-  } catch { /* no audio */ }
-}
-const sfx = {
-  good: () => { tone([[660, 0.12], [990, 0.22]]); navigator.vibrate?.(20); },
-  bad: () => { tone([[220, 0.18, 'square'], [170, 0.25, 'square']]); navigator.vibrate?.([40, 40, 40]); },
-  tap: () => tone([[520, 0.05, 'triangle']]),
-  win: () => tone([[523, 0.12], [659, 0.12], [784, 0.12], [1047, 0.35]]),
-};
-function speak(text) {
-  try {
-    if (!('speechSynthesis' in window)) return;
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text); u.lang = 'es-ES'; u.rate = 0.9;
-    speechSynthesis.speak(u);
-  } catch { /* no tts */ }
-}
-
-/* ================= Helpers ================= */
 const $app = document.getElementById('app');
-const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const course = () => COURSES[S.course] || COURSES.chess;
-const allLessons = (c = course()) => c.units.flatMap((u, ui) => u.lessons.map((l, li) => ({ ...l, ui, li, unit: u })));
-function currentLessonId(c = course()) { const l = allLessons(c).find((x) => !S.done[x.id]); return l ? l.id : null; }
-function lessonUnlocked(id, c = course()) {
-  const list = allLessons(c); const i = list.findIndex((x) => x.id === id);
-  return i === 0 || !!S.done[list[i - 1].id];
-}
-const PIECES = { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' };
+let openCourse = null; // id of the course screen being shown, if any
+let lastKey = '';
 
-function boardHTML(b) {
-  if (!b) return '';
-  const rows = b.flip ? [...b.board].reverse().map((r) => [...r].reverse()) : b.board;
-  let cells = '';
-  rows.forEach((row, ri) => row.forEach((sq, ci) => {
-    const file = b.flip ? 7 - ci : ci; const rank = b.flip ? ri + 1 : 8 - ri;
-    const name = 'abcdefgh'[file] + rank;
-    const light = (file + rank) % 2 === 1;
-    const hl = b.last.includes(name) ? ' hl' : '';
-    const piece = sq ? `<span class="pc ${sq.color}">${PIECES[sq.type]}︎</span>` : '';
-    cells += `<div class="sq ${light ? 'l' : 'd'}${hl}">${piece}</div>`;
-  }));
-  return `<div class="board" aria-label="Chess board">${cells}</div>`;
-}
+/* ================= Course helpers ================= */
+const lessonsOf = (c) => c.units.flatMap((u, ui) => u.lessons.map((l, li) => ({ ...l, ui, li, unit: u })));
+const progressOf = (c) => { const ls = lessonsOf(c); const done = ls.filter((l) => S.done[l.id]).length; return { done, total: ls.length, pct: ls.length ? done / ls.length : 0 }; };
+const nextLesson = (c) => lessonsOf(c).find((l) => !S.done[l.id]) || null;
+const unlocked = (c, id) => { const ls = lessonsOf(c); const i = ls.findIndex((x) => x.id === id); return i === 0 || !!S.done[ls[i - 1]?.id]; };
+const started = () => Object.values(COURSES).filter((c) => progressOf(c).done > 0);
+const starsOf = (id) => +S.done[id] || 0;
+const starRow = (n) => `<span class="stars">${[1, 2, 3].map((k) => `<i class="${k <= n ? 'on' : ''}">★</i>`).join('')}</span>`;
+const colorVars = (color) => { const [c, d] = COLORS[color] || COLORS.green; return `--c:${c};--cd:${d}`; };
 
-function topBar() {
-  regenHearts();
-  const c = course();
-  return `<header class="topbar">
-    <button class="chip" data-act="courses" aria-label="Change course"><span class="flag">${c.icon}</span></button>
-    <div class="chip stat ${streakAlive() && S.streak ? 'fire' : 'off'}" title="Day streak">🔥 <b>${streakAlive() ? S.streak : 0}</b></div>
-    <div class="chip stat gem" title="Gems">💎 <b>${S.gems}</b></div>
-    <button class="chip stat heart" data-act="hearts" title="Hearts">❤️ <b>${S.hearts}</b></button>
-  </header>`;
-}
+/* ================= Shell ================= */
+const TABS = [['today', 'Today', 'M12 3l9 8h-3v9h-5v-6h-2v6H6v-9H3z'], ['learn', 'Learn', 'M4 5h7a3 3 0 013 3v12a2 2 0 00-2-2H4zM20 5h-7a3 3 0 00-3 3v12a2 2 0 012-2h8z'],
+  ['garden', 'Garden', 'M11 21v-7.2C6.5 13.6 4 11 4 7c4 0 7 2.3 7.6 5.6C12.5 8 15.5 5 20 5c0 5-3 8.4-7 8.9V21z'], ['me', 'Me', 'M12 12a4 4 0 100-8 4 4 0 000 8zM4 21c0-4 4-7 8-7s8 3 8 7z']];
 
-function navBar() {
-  const items = [['learn', '🏠', 'Learn'], ['habits', '✅', 'Habits'], ['profile', '🌱', 'Profile']];
-  return `<nav class="nav">${items.map(([id, ic, lb]) => `<button class="nav-btn ${S.tab === id ? 'on' : ''}" data-tab="${id}"><span>${ic}</span><small>${lb}</small></button>`).join('')}</nav>`;
-}
-
-/* ================= Screens ================= */
 function render() {
   if (!S.onboarded) return renderOnboarding();
-  const body = S.tab === 'habits' ? habitsView() : S.tab === 'profile' ? profileView() : learnView();
-  $app.innerHTML = `<div class="shell">${topBar()}<main class="main">${body}</main>${navBar()}</div>`;
-  if (S.tab === 'learn') requestAnimationFrame(() => document.querySelector('.node.current')?.scrollIntoView({ block: 'center', behavior: 'instant' }));
+  const key = openCourse ? `course:${openCourse}` : `tab:${S.tab}`;
+  const body = openCourse ? courseScreen(COURSES[openCourse]) : { today: todayScreen, learn: learnScreen, garden: gardenScreen, me: meScreen }[S.tab]();
+  const ti = TABS.findIndex((t) => t[0] === S.tab);
+  $app.innerHTML = `<div class="shell">
+    <main class="main ${key !== lastKey ? 'screen-in' : ''}" id="main">${body}</main>
+    ${openCourse ? '' : `<nav class="dock" aria-label="Main"><div class="dock-in" style="--x:${ti}"><span class="dock-blob"></span>
+      ${TABS.map(([id, label, d]) => `<button class="dock-btn ${S.tab === id ? 'on' : ''}" data-tab="${id}" aria-label="${label}"><svg viewBox="0 0 24 24" width="24" height="24"><path d="${d}" fill="currentColor"/></svg><small>${label}</small></button>`).join('')}
+    </div></nav>`}
+  </div>`;
+  if (key !== lastKey) document.getElementById('main').scrollTop = 0;
+  lastKey = key;
+  countUp($app);
+  if (openCourse) requestAnimationFrame(() => document.querySelector('.lt.next')?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
 }
 
+/* ================= Onboarding ================= */
 function renderOnboarding() {
-  $app.innerHTML = `<div class="onboard">
-    <div class="ob-hero">${mascot('cheer', 150)}</div>
-    <h1>Hi, I'm Hana!</h1>
-    <p class="muted">Tiny lessons, every day. What do you want to grow first?</p>
-    <div class="ob-list">
-      <button class="pick" data-ob="chess"><span class="pick-ic">♞</span><span><b>Chess</b><small>Play gambits against an AI that coaches you</small></span></button>
-      <button class="pick" data-ob="history"><span class="pick-ic">📜</span><span><b>GCSE History</b><small>The Cold War, from your revision notes</small></span></button>
-      <button class="pick" data-ob="es"><span class="pick-ic">🇪🇸</span><span><b>Spanish</b><small>Words, phrases and listening</small></span></button>
-      <button class="pick" data-ob="habits"><span class="pick-ic">✅</span><span><b>Daily Habits</b><small>Build streaks for the things you care about</small></span></button>
+  $app.innerHTML = `<div class="onboard2 screen-in">
+    <div class="ob-scene">${homeScene()}<div class="ob-hana">${mascot('wave', 150)}</div></div>
+    <div class="ob-body">
+      <h1>Hi, I'm Hana!</h1>
+      <p class="muted">Pick something to grow first. You can add more later.</p>
+      <div class="ob-grid">
+        ${[['school', 'School', 'GCSE subjects from your notes', 'literature', 'purple'], ['language', 'Languages', `${CATEGORIES[1].blurb}`, 'english', 'blue'],
+          ['chess', 'Chess', 'Play gambits against me', 'chess', 'green'], ['habits', 'Habits', 'Daily streaks and a bookshelf', 'habit', 'yellow']]
+          .map(([id, t, s, ic, col], i) => `<button class="ob-tile" data-ob="${id}" style="${colorVars(col)};--i:${i}"><span class="ob-ic">${icon(ic, col, 44)}</span><b>${t}</b><small>${s}</small></button>`).join('')}
+      </div>
     </div>
   </div>`;
 }
 
-function learnView() {
-  const c = course(); const cur = currentLessonId(c);
-  const offs = [0, 44, 66, 44, 0, -44, -66, -44];
-  let i = 0;
-  const units = c.units.map((u, ui) => {
-    const nodes = u.lessons.map((l, li) => {
-      const done = !!S.done[l.id]; const open = lessonUnlocked(l.id, c); const isCur = l.id === cur;
-      const st = done ? 'done' : isCur ? 'current' : open ? 'open' : 'locked';
-      const x = offs[i++ % offs.length];
-      const icon = done ? '★' : st === 'locked' ? '🔒' : l.kind === 'play' ? '♞' : l.kind === 'quiz' ? '📝' : '★';
-      let html = `<div class="node-wrap" style="--x:${x}px">
-        ${isCur ? '<div class="start-tip">START</div>' : ''}
-        <button class="node ${st} c-${u.color}" data-lesson="${l.id}" ${st === 'locked' ? 'aria-disabled="true"' : ''} aria-label="${esc(l.title)}">${icon}</button>
-      </div>`;
-      if (li === u.lessons.length - 1) {
-        const cid = `${c.id}:${ui}`; const unitDone = u.lessons.every((x) => S.done[x.id]);
-        const x2 = offs[i++ % offs.length];
-        html += `<div class="node-wrap" style="--x:${x2}px"><button class="chest ${S.chests[cid] ? 'opened' : unitDone ? 'ready' : ''}" data-chest="${cid}" aria-label="Treasure chest">${S.chests[cid] ? '📭' : '🎁'}</button></div>`;
-      }
-      return html;
-    }).join('');
-    const side = ui % 2 === 0 ? 'right' : 'left';
-    return `<section class="unit">
-      <div class="unit-banner c-${u.color}">
-        <div><small>UNIT ${ui + 1}</small><h2>${esc(u.title)}</h2><p>${esc(u.desc)}</p></div>
-        <button class="guide-btn" data-guide="${ui}" aria-label="Unit guide">📖<span>GUIDE</span></button>
-      </div>
-      <div class="path">${nodes}<div class="path-mascot ${side}">${mascot(ui % 2 ? 'think' : 'happy', 96)}</div></div>
-    </section>`;
-  }).join('');
-  const free = c.id === 'chess' ? `<div class="free">
-      <div class="free-top">${mascot('happy', 64)}<div><b>Free play vs Hana</b><small>A full game from the start. Hana grades every move you make.</small></div></div>
-      <div class="seg">${[1, 2, 3].map((lv) => `<button data-free="${lv}">${['', 'Easy', 'Medium', 'Hard'][lv]}</button>`).join('')}</div>
-    </div>` : c.note ? `<p class="course-note">📓 ${esc(c.note)}</p>` : '';
-  return `<div class="learn">${free}${units}<p class="end-note muted">More units are growing. Check back soon! 🌱</p></div>`;
-}
+/* ================= Today ================= */
+function greeting() { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'; }
+const dayLetter = (d) => 'SMTWTFS'[new Date(d + 'T12:00').getDay()];
 
-function habitsView() {
-  const t = today(); const habits = S.habits;
-  const doneN = habits.filter((h) => h.log[t]).length;
-  const pct = habits.length ? doneN / habits.length : 0;
-  const days = [...Array(7)].map((_, k) => dayOffset(k - 6));
-  const dayLetter = (d) => 'SMTWTFS'[new Date(d + 'T12:00').getDay()];
-  const streakOf = (h) => { let n = 0; let k = h.log[t] ? 0 : -1; while (h.log[dayOffset(k)]) { n++; k--; } return n; };
-  const cards = habits.map((h) => `<div class="habit c-${h.color}">
-      <div class="h-emoji">${h.emoji}</div>
-      <div class="h-body"><b>${esc(h.name)}</b>
-        <div class="h-meta">🔥 ${streakOf(h)} day${streakOf(h) === 1 ? '' : 's'}</div>
-        <div class="dots">${days.map((d) => `<span class="dot ${h.log[d] ? 'on' : ''} ${d === t ? 'today' : ''}" title="${d}">${dayLetter(d)}</span>`).join('')}</div>
+function todayScreen() {
+  const t = today();
+  const xpToday = S.xpByDay[t] || 0; const pct = Math.min(1, xpToday / S.dailyGoal);
+  const week = [...Array(7)].map((_, k) => dayOffset(k - 6));
+  const cont = S.course && COURSES[S.course] ? COURSES[S.course] : started()[0];
+  const nl = cont && nextLesson(cont);
+  const line = pct >= 1 ? 'Daily goal done. Your garden loves you!' : xpToday ? `${S.dailyGoal - xpToday} XP to reach today's goal.` : 'Ready for a quick lesson?';
+  const habits = S.habits; const doneN = habits.filter((h) => h.log[t]).length;
+  const suggest = Object.values(COURSES).filter((c) => !progressOf(c).done && c.id !== cont?.id);
+  const picks = [...suggest.filter((c) => c.cat === 'school').slice(0, 3), ...suggest.filter((c) => c.cat === 'language').slice(0, 3)];
+  const R = 34; const C = 2 * Math.PI * R;
+  return `<div class="today">
+    <section class="hero ${isNight() ? 'night' : ''}">${homeScene()}
+      <div class="hero-text"><small>${new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}</small>
+        <h1>${greeting()}${S.name ? `, ${esc(S.name)}` : ''}!</h1><p>${line}</p></div>
+      <div class="hero-hana">${mascot('wave', 118)}</div>
+    </section>
+
+    <div class="row2 rise" style="--i:1">
+      <div class="card goal-card">
+        <svg class="ring" viewBox="0 0 80 80" width="80" height="80"><circle cx="40" cy="40" r="${R}" class="ring-bg"/><circle cx="40" cy="40" r="${R}" class="ring-fg" style="--len:${C};--off:${C * (1 - pct)}"/></svg>
+        <div class="ring-label"><b data-count="${xpToday}">0</b><small>/ ${S.dailyGoal} XP</small></div>
+        <span class="card-cap">Daily goal</span>
       </div>
-      <div class="h-actions">
-        <button class="check ${h.log[t] ? 'on' : ''}" data-habit="${h.id}" aria-label="Mark ${esc(h.name)} done today">✓</button>
-        <button class="h-del" data-delhabit="${h.id}" aria-label="Delete ${esc(h.name)}">✕</button>
+      <div class="card streak-card">
+        <div class="flame ${streakAlive() && S.streak ? 'lit' : ''}">🔥</div>
+        <b class="big" data-count="${streakAlive() ? S.streak : 0}">0</b><span class="card-cap">day streak</span>
+        <div class="week">${week.map((d) => `<i class="${S.xpByDay[d] ? 'on' : ''} ${d === t ? 'today' : ''}">${dayLetter(d)}</i>`).join('')}</div>
       </div>
-    </div>`).join('');
-  return `<div class="habits">
-    <div class="h-hero">
-      <div class="ring" style="--p:${pct}"><div>${doneN}/${habits.length}</div></div>
-      <div><h2>Today's habits</h2><p class="muted">${doneN === habits.length && habits.length ? 'All done. Hana is proud of you!' : 'Each check-in earns 5 XP and keeps your streak alive.'}</p></div>
     </div>
-    ${cards || `<div class="empty">${mascot('think', 90)}<p>No habits yet. Add one below.</p></div>`}
-    <button class="btn blue wide" data-act="addhabit">+ ADD A HABIT</button>
+
+    ${cont ? `<button class="continue rise" style="${colorVars(cont.color)};--i:2" data-open="${cont.id}">
+        ${badge(cont, 58)}<span class="cont-text"><small>${nl ? 'Continue' : 'Course complete'}</small><b>${esc(cont.name)}</b><span>${esc(nl ? nl.title : 'Practise any lesson again')}</span>
+        <span class="bar"><i style="width:${progressOf(cont).pct * 100}%"></i></span></span><span class="play-dot" aria-hidden="true">▶</span></button>`
+      : `<button class="continue rise empty" style="${colorVars('blue')};--i:2" data-tab="learn">${icon('book', 'blue', 46)}<span class="cont-text"><small>Start here</small><b>Choose your first course</b><span>School, languages or chess</span></span><span class="play-dot">▶</span></button>`}
+
+    <section class="card list-card rise" style="--i:3">
+      <header><h2>Today's habits</h2><span class="pill">${doneN}/${habits.length}</span><button class="link" data-act="addhabit">+ Add</button></header>
+      ${habits.length ? habits.map((h) => {
+        let n = 0; let k = h.log[t] ? 0 : -1; while (h.log[dayOffset(k)]) { n++; k--; }
+        return `<div class="hrow" style="${colorVars(h.color)}"><span class="h-ico">${h.emoji}</span><span class="h-txt"><b>${esc(h.name)}</b><small>🔥 ${n} day${n === 1 ? '' : 's'}</small></span>
+          <button class="h-del" data-delhabit="${h.id}" aria-label="Delete ${esc(h.name)}">✕</button>
+          <button class="check ${h.log[t] ? 'on' : ''}" data-habit="${h.id}" aria-label="Mark ${esc(h.name)} done"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M5 12.5l4.5 4.5L19 7" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>`;
+      }).join('') : '<p class="muted pad">No habits yet. Add one to start a streak.</p>'}
+    </section>
+
+    <section class="card list-card rise" style="--i:4">
+      <header><h2>Bookshelf</h2><span class="pill">${S.books.filter((b) => b.status === 'done').length} read</span><button class="link" data-act="addbook">+ Add book</button></header>
+      ${S.books.length ? S.books.map((b) => `<div class="brow"><span class="spine s-${b.status}"></span><span class="h-txt"><b>${esc(b.title)}</b><small>${esc(b.author || 'Unknown author')}${b.notes ? ` · ${esc(b.notes)}` : ''}</small></span>
+          <button class="status st-${b.status}" data-book="${b.id}">${{ want: 'Want to read', reading: 'Reading', done: 'Finished' }[b.status]}</button>
+          <button class="h-del" data-delbook="${b.id}" aria-label="Remove ${esc(b.title)}">✕</button></div>`).join('')
+        : '<p class="muted pad">Track what you\'re reading, like your Reading Dashboard note. Tap a book\'s status to move it along.</p>'}
+    </section>
+
+    ${picks.length ? `<section class="rise" style="--i:5"><h2 class="sec-h">Try something new</h2>
+      <div class="hscroll">${picks.map((c) => `<button class="mini-course" data-open="${c.id}" style="${colorVars(c.color)}">${badge(c, 52)}<b>${esc(c.name)}</b><small>${esc(c.sub || '')}</small></button>`).join('')}</div></section>` : ''}
   </div>`;
 }
 
-function profileView() {
+/* ================= Learn (library) ================= */
+function learnScreen() {
+  const cats = S.lib === 'all' ? CATEGORIES : CATEGORIES.filter((c) => c.id === S.lib);
+  return `<div class="library">
+    <header class="page-head"><h1>Library</h1><p class="muted">${Object.keys(COURSES).length} courses. Every one grows a plant in your garden.</p></header>
+    <label class="search"><svg viewBox="0 0 24 24" width="20" height="20"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2.6"/><path d="M16.5 16.5L21 21" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>
+      <input id="lib-q" type="search" placeholder="Search subjects and languages" autocomplete="off" aria-label="Search courses"></label>
+    <div class="chips">${[['all', 'All'], ...CATEGORIES.map((c) => [c.id, c.name])].map(([id, n]) => `<button class="chip-btn ${S.lib === id ? 'on' : ''}" data-lib="${id}">${n}</button>`).join('')}</div>
+    ${cats.map((cat) => {
+      const list = Object.values(COURSES).filter((c) => c.cat === cat.id);
+      return `<section class="cat" data-cat="${cat.id}"><h2 class="sec-h">${cat.name} <small>${cat.blurb}</small></h2>
+        <div class="cgrid">${list.map((c, i) => { const p = progressOf(c); return `<button class="ccard" data-open="${c.id}" data-name="${esc(`${c.name} ${c.sub || ''}`.toLowerCase())}" style="${colorVars(c.color)};--i:${Math.min(i, 12)}">
+          ${badge(c, 56)}<b>${esc(c.name)}</b><small>${esc(c.sub || '')}</small>
+          <span class="cc-foot"><span class="bar"><i style="width:${p.pct * 100}%"></i></span><em>${p.done}/${p.total}</em></span></button>`; }).join('')}</div></section>`;
+    }).join('')}
+    <p class="muted empty-search" id="no-results" hidden>No courses match that search.</p>
+  </div>`;
+}
+
+/* ================= Course ================= */
+function courseScreen(c) {
+  const p = progressOf(c); const nl = nextLesson(c);
+  const catName = CATEGORIES.find((x) => x.id === c.cat)?.name || '';
+  let n = 0;
+  return `<div class="course2" style="${colorVars(c.color)}">
+    <header class="c-hero">
+      <button class="icon-btn back" data-act="back" aria-label="Back">←</button>
+      <div class="c-hero-main">${badge(c, 84)}<div><small>${esc(catName)}</small><h1>${esc(c.name)}</h1><p>${esc(c.sub || '')}</p></div></div>
+      <div class="c-progress"><span class="bar"><i style="width:${p.pct * 100}%"></i></span><b>${p.done}/${p.total} lessons</b></div>
+      ${waves(c.color)}
+    </header>
+    ${c.note ? `<p class="course-note">📓 ${esc(c.note)}</p>` : ''}
+    ${c.id === 'chess' ? `<div class="card free rise" style="--i:0"><div class="free-top">${mascot('happy', 60)}<div><b>Free play vs Hana</b><small>A full game from move one. I grade every move.</small></div></div>
+      <div class="seg">${[1, 2, 3].map((lv) => `<button data-free="${lv}">${['', 'Easy', 'Medium', 'Hard'][lv]}</button>`).join('')}</div></div>` : ''}
+    ${c.units.map((u, ui) => `<section class="chapter rise" style="${colorVars(u.color)};--i:${ui + 1}">
+        <div class="ch-head"><div><span class="ch-tag">Chapter ${ui + 1}</span><h2>${esc(u.title)}</h2><p>${esc(u.desc)}</p></div>
+          <button class="guide-btn" data-guide="${ui}" aria-label="Chapter guide">${icon('book', u.color, 26)}<span>Guide</span></button></div>
+        <div class="ltiles">${u.lessons.map((l) => {
+          n++;
+          const st = S.done[l.id] ? 'done' : l.id === nl?.id ? 'next' : unlocked(c, l.id) ? 'open' : 'locked';
+          const glyph = st === 'locked' ? '🔒' : l.kind === 'play' ? '♞' : l.kind === 'quiz' ? '✎' : n;
+          return `<button class="lt ${st} ${l.kind === 'play' ? 'play' : ''}" data-lesson="${l.id}" aria-label="${esc(l.title)}">
+            ${st === 'next' ? '<span class="go-tag">GO</span>' : ''}<span class="lt-g">${glyph}</span>${st === 'done' ? starRow(starsOf(l.id)) : `<span class="lt-n">${l.kind === 'play' ? esc(GAMBITS[l.play.key].name.split(' ')[0]) : ''}</span>`}</button>`;
+        }).join('')}</div>
+      </section>`).join('')}
+    <p class="muted end-note">More chapters are growing. 🌱</p>
+  </div>`;
+}
+
+/* ================= Garden ================= */
+function gardenScreen() {
+  const list = started();
+  const stage = (c) => { const p = progressOf(c).pct; return p >= 1 ? 4 : p >= 0.5 ? 3 : p >= 0.2 ? 2 : 1; };
+  const blooms = list.filter((c) => stage(c) === 4).length;
+  return `<div class="garden">
+    <header class="page-head"><h1>Your garden</h1><p class="muted">Every course you start grows a plant. Finish its lessons to make it bloom.</p></header>
+    <div class="g-stats rise" style="--i:0">
+      <div><b data-count="${list.length}">0</b><small>plants</small></div><div><b data-count="${blooms}">0</b><small>in bloom</small></div>
+      <div><b data-count="${S.xp}">0</b><small>☀️ XP</small></div><div><b data-count="${S.seeds}">0</b><small>🌱 seeds</small></div>
+    </div>
+    <div class="bed rise" style="--i:1">
+      <div class="bed-sky"><span class="g-cloud a"></span><span class="g-cloud b"></span></div>
+      <div class="plots">
+        ${list.map((c, i) => `<button class="plot" data-open="${c.id}" style="--i:${i}">${plant(stage(c), c.color, 70)}<b>${c.flag ? `${c.flag} ` : ''}${esc(c.name)}</b><small>${Math.round(progressOf(c).pct * 100)}%</small></button>`).join('')}
+        <button class="plot empty" data-tab="learn">${plant(0, 'green', 70)}<b>Plant a seed</b><small>Start a course</small></button>
+      </div>
+    </div>
+    <p class="muted center-note">Seeds pay for chess hints and take-backs. Earn them by finishing lessons and winning games.</p>
+  </div>`;
+}
+
+/* ================= Me ================= */
+function meScreen() {
   const days = [...Array(7)].map((_, k) => dayOffset(k - 6));
   const vals = days.map((d) => S.xpByDay[d] || 0); const max = Math.max(S.dailyGoal, ...vals);
   const lessons = Object.keys(S.done).length;
-  const todayXP = S.xpByDay[today()] || 0;
   const badges = [
-    ['🔥', 'Spark', '3-day streak', S.streak >= 3], ['🏆', 'Scholar', '10 lessons', lessons >= 10],
-    ['💯', 'Perfectionist', 'A perfect lesson or a 90%+ game', !!S.perfect], ['♚', 'Checkmate', 'Beat Hana at chess', (S.wins || 0) >= 1], ['📜', 'Historian', 'Finish a GCSE History unit', ['cw:0:1', 'cw:1:1', 'cw:2:0'].some((k) => S.done[k])], ['🌳', 'Evergreen', '1,000 XP', S.xp >= 1000],
+    ['🔥', 'Spark', '3-day streak', S.streak >= 3], ['🌸', 'First bloom', 'Finish a whole course', Object.values(COURSES).some((c) => progressOf(c).pct >= 1)],
+    ['💯', 'Flawless', 'Three stars on a lesson', Object.values(S.done).some((v) => +v >= 3)], ['♚', 'Checkmate', 'Beat Hana at chess', S.wins >= 1],
+    ['🎓', 'Scholar', 'Lessons in 3 school subjects', Object.values(COURSES).filter((c) => c.cat === 'school' && progressOf(c).done).length >= 3],
+    ['🌍', 'Polyglot', 'Start 3 languages', Object.values(COURSES).filter((c) => c.cat === 'language' && progressOf(c).done).length >= 3],
+    ['📚', 'Bookworm', 'Finish a book', S.books.some((b) => b.status === 'done')], ['🌳', 'Evergreen', '1,000 XP', S.xp >= 1000],
   ];
-  return `<div class="profile">
-    <div class="p-head">${mascot('happy', 84)}<div><h2>Your garden</h2><p class="muted">Learning ${esc(course().name)}</p></div></div>
-    <div class="stats">
-      <div class="stat-card"><span>🔥</span><b>${streakAlive() ? S.streak : 0}</b><small>Day streak</small></div>
-      <div class="stat-card"><span>⚡</span><b>${S.xp}</b><small>Total XP</small></div>
-      <div class="stat-card"><span>📘</span><b>${lessons}</b><small>Lessons</small></div>
-      <div class="stat-card"><span>💎</span><b>${S.gems}</b><small>Gems</small></div>
+  return `<div class="me">
+    <header class="me-head rise" style="--i:0"><div class="avatar">${mascot('happy', 76)}</div>
+      <div><h1>${esc(S.name || 'Your profile')}</h1><p class="muted">${started().length} courses growing · ${lessons} lessons done</p></div></header>
+    <div class="stats4 rise" style="--i:1">
+      <div class="stat"><span>🔥</span><b data-count="${streakAlive() ? S.streak : 0}">0</b><small>Streak</small></div>
+      <div class="stat"><span>☀️</span><b data-count="${S.xp}">0</b><small>Total XP</small></div>
+      <div class="stat"><span>📘</span><b data-count="${lessons}">0</b><small>Lessons</small></div>
+      <div class="stat"><span>♚</span><b data-count="${S.wins}">0</b><small>Chess wins</small></div>
     </div>
-    <h3>Daily goal · ${todayXP}/${S.dailyGoal} XP</h3>
-    <div class="goalbar"><i style="width:${Math.min(100, (todayXP / S.dailyGoal) * 100)}%"></i></div>
-    <div class="seg">${[10, 20, 30, 50].map((g) => `<button class="${S.dailyGoal === g ? 'on' : ''}" data-goal="${g}">${g} XP</button>`).join('')}</div>
-    <h3>This week</h3>
-    <div class="chart">${days.map((d, k) => `<div class="bar"><i style="height:${(vals[k] / max) * 100}%"></i><small>${'SMTWTFS'[new Date(d + 'T12:00').getDay()]}</small><em>${vals[k] || ''}</em></div>`).join('')}</div>
-    <h3>Achievements</h3>
-    <div class="badges">${badges.map(([e, n, d, ok]) => `<div class="badge ${ok ? 'got' : ''}"><span>${e}</span><b>${n}</b><small>${d}</small></div>`).join('')}</div>
-    <h3>Settings</h3>
-    <div class="settings">
-      <button class="row" data-act="sound">🔊 Sound effects <b>${S.sound ? 'On' : 'Off'}</b></button>
-      <button class="row" data-act="courses">📚 Switch course <b>${esc(course().name)}</b></button>
-      ${installPrompt ? '<button class="row" data-act="install">📲 Install Sprout <b>Add to home screen</b></button>' : ''}
-      <button class="row danger" data-act="reset">🗑️ Reset all progress</button>
-    </div>
+    <section class="card rise" style="--i:2"><h2 class="card-h">This week</h2>
+      <div class="chart">${days.map((d, k) => `<div class="bar-col"><em>${vals[k] || ''}</em><i style="--h:${(vals[k] / max) * 100}%;--i:${k}"></i><small>${dayLetter(d)}</small></div>`).join('')}</div></section>
+    <section class="rise" style="--i:3"><h2 class="sec-h">Badges</h2>
+      <div class="badges2">${badges.map(([e, n, d, ok]) => `<div class="bdg ${ok ? 'got' : ''}"><span>${e}</span><b>${n}</b><small>${d}</small></div>`).join('')}</div></section>
+    <section class="card list-card rise" style="--i:4"><header><h2>Chess game review</h2></header>
+      ${S.games.length ? S.games.slice(0, 6).map((g) => `<div class="grow"><span class="res-chip r-${g.result}">${{ win: 'Won', draw: 'Draw', loss: 'Lost' }[g.result]}</span>
+          <span class="h-txt"><b>${esc(g.title)}</b><small>${esc(g.date)} · ${['', 'Easy', 'Medium', 'Hard'][g.level]} · ${g.accuracy}% accuracy</small>
+          ${g.worst ? `<small class="worst">Avoid next time: <span class="mono">${esc(g.worst.move)}${esc(g.worst.san)}</span> (${esc(g.worst.label)})${g.worst.best ? `, <span class="mono">${esc(g.worst.best)}</span> was better` : ''}</small>` : '<small class="worst ok">No big mistakes. Nice!</small>'}</span></div>`).join('')
+        : '<p class="muted pad">Play a chess game and it will show up here, with the one mistake to avoid next time.</p>'}
+    </section>
+    <section class="card rise" style="--i:5"><h2 class="card-h">Settings</h2>
+      <div class="settings2">
+        <label class="set-row" for="set-name">Your name<input id="set-name" maxlength="24" placeholder="Optional" value="${esc(S.name)}"></label>
+        <div class="set-row">Daily goal<div class="seg sm">${[10, 20, 30, 50].map((g) => `<button class="${S.dailyGoal === g ? 'on' : ''}" data-goal="${g}">${g}</button>`).join('')}</div></div>
+        <button class="set-row" data-act="sound">Sound effects<b>${S.sound ? 'On' : 'Off'}</b></button>
+        ${installPrompt ? '<button class="set-row" data-act="install">Install Sprout<b>Add to home screen</b></button>' : ''}
+        <button class="set-row danger" data-act="reset">Reset all progress</button>
+      </div></section>
   </div>`;
 }
 
-/* ================= Modals ================= */
-function sheet(html, cls = '') {
-  closeSheet();
+/* ================= Sheets ================= */
+function sheet(html) {
+  document.querySelector('.sheet-back')?.remove();
   const el = document.createElement('div');
-  el.className = 'sheet-back'; el.innerHTML = `<div class="sheet ${cls}" role="dialog" aria-modal="true">${html}</div>`;
+  el.className = 'sheet-back'; el.innerHTML = `<div class="sheet" role="dialog" aria-modal="true"><span class="grabber"></span>${html}</div>`;
   el.addEventListener('click', (e) => { if (e.target === el || e.target.closest('[data-close]')) closeSheet(); });
   document.body.appendChild(el);
 }
-function closeSheet() { document.querySelector('.sheet-back')?.remove(); }
+function closeSheet() { const s = document.querySelector('.sheet-back'); if (!s) return; s.classList.add('closing'); setTimeout(() => s.remove(), 160); }
 
-function coursesSheet() {
-  sheet(`<h2>Choose a course</h2><div class="ob-list">${Object.values(COURSES).map((c) => {
-    const n = allLessons(c).filter((l) => S.done[l.id]).length; const tot = allLessons(c).length;
-    return `<button class="pick ${S.course === c.id ? 'sel' : ''}" data-course="${c.id}"><span class="pick-ic">${c.icon}</span><span><b>${c.name}</b><small>${n}/${tot} lessons</small></span></button>`;
-  }).join('')}</div>`);
+function lessonSheet(c, id) {
+  const l = lessonsOf(c).find((x) => x.id === id);
+  let preview = '';
+  if (l.words) preview = `<div class="word-chips"${c.tts ? ` lang="${c.tts}"` : ''}>${l.words.map((w) => `<span class="wchip"><em>${w.emoji}</em><b dir="auto">${esc(w.t)}</b><small>${esc(w.rom || w.en)}</small></span>`).join('')}</div>`;
+  else if (l.kind === 'play') { const g = GAMBITS[l.play.key]; preview = `<p class="mono moves-line">${esc(movesText(g.moves))}</p><p>${esc(g.idea)}</p><p class="muted">You play ${g.side} · Hana is ${l.play.levelName}. Win or draw to pass.</p>`; }
+  else if (l.qs) preview = `<p class="muted">${l.qs.length + 2} questions, including key terms:</p><div class="word-chips">${l.terms.map(([t]) => `<span class="wchip"><b>${esc(t)}</b></span>`).join('')}</div>`;
+  else if (l.items) preview = `<div class="tl">${l.items.map((it) => `<div><b>${esc(it.year)}</b><span>${esc(it.event)}</span></div>`).join('')}</div>`;
+  else if (l.keys) preview = `<p class="muted">Review quiz on ${l.keys.map((k) => esc(GAMBITS[k].name)).join(', ')}.</p>`;
+  const st = starsOf(id);
+  sheet(`<div class="ls-head" style="${colorVars(l.unit.color)}"><span class="ch-tag">Chapter ${l.ui + 1}</span><h2>${esc(l.title)}</h2>${st ? starRow(st) : ''}</div>
+    ${preview}
+    <button class="btn wide" style="${colorVars(c.color)}" data-start="${id}">${st ? 'Practise again' : l.kind === 'play' ? 'Play' : 'Start'}</button>`);
 }
-function heartsSheet(blocking = false) {
-  regenHearts();
-  const mins = Math.ceil((HEART_MS - (Date.now() - S.heartsAt)) / 60000);
-  sheet(`<div class="center">${mascot(S.hearts ? 'happy' : 'sad', 90)}
-    <h2>${S.hearts ? `You have ${S.hearts} hearts` : "You're out of hearts"}</h2>
-    <div class="hearts-row">${[...Array(MAX_HEARTS)].map((_, k) => `<span class="${k < S.hearts ? '' : 'empty'}">❤️</span>`).join('')}</div>
-    <p class="muted">${S.hearts >= MAX_HEARTS ? 'Full! Every mistake costs one heart.' : `Next heart in ${mins} min.`}</p>
-    ${S.hearts < MAX_HEARTS ? `<button class="btn blue wide" data-act="refill" ${S.gems < 350 ? 'disabled' : ''}>REFILL · 💎 350</button>` : ''}
-    <button class="btn ghost wide" data-close>${blocking ? 'NO THANKS' : 'CLOSE'}</button></div>`);
+
+function guideSheet(c, ui) {
+  const u = c.units[ui];
+  sheet(`<h2>Chapter ${ui + 1}: ${esc(u.title)}</h2><p class="muted">${esc(u.desc)}</p>
+    <div class="guide">${u.guide.map((g) => `<div class="g-row"><b dir="auto">${esc(g.term)}</b><span>${esc(g.def)}</span></div>`).join('')}</div>
+    <button class="btn wide" style="${colorVars(u.color)}" data-close>Got it</button>`);
 }
-function guideSheet(ui) {
-  const u = course().units[ui];
-  sheet(`<h2>Unit ${ui + 1}: ${esc(u.title)}</h2><p class="muted">${esc(u.desc)}</p>
-    <div class="guide">${u.guide.map((g) => `<div class="g-row"><b>${esc(g.term)}</b><span>${esc(g.def)}</span></div>`).join('')}</div>
-    <button class="btn green wide" data-close>GOT IT</button>`);
-}
+
 const EMOJIS = ['💧', '📚', '🧘', '🏃', '🥗', '😴', '🎸', '✍️', '🧹', '💊', '🚶', '♟️', '🗣️', '🌞', '📵', '🦷'];
-const COLORS = ['green', 'blue', 'purple', 'red', 'yellow'];
+const HCOLORS = ['green', 'blue', 'purple', 'red', 'yellow'];
 function addHabitSheet() {
-  sheet(`<h2>New habit</h2>
-    <form id="habit-form" class="form">
-      <label for="h-name">Name</label><input id="h-name" maxlength="40" placeholder="e.g. Practice guitar" required autocomplete="off">
-      <label>Icon</label><div class="emoji-grid">${EMOJIS.map((e, k) => `<button type="button" class="emo ${k === 0 ? 'on' : ''}" data-emo="${e}">${e}</button>`).join('')}</div>
-      <label>Color</label><div class="color-row">${COLORS.map((c, k) => `<button type="button" class="sw c-${c} ${k === 0 ? 'on' : ''}" data-col="${c}" aria-label="${c}"></button>`).join('')}</div>
-      <button class="btn green wide" type="submit">ADD HABIT</button>
-    </form>`);
-  setTimeout(() => document.getElementById('h-name')?.focus(), 50);
+  sheet(`<h2>New habit</h2><form id="habit-form" class="form">
+    <label for="h-name">Name</label><input id="h-name" maxlength="40" placeholder="e.g. Practise guitar" required autocomplete="off">
+    <span class="lbl">Icon</span><div class="emoji-grid">${EMOJIS.map((e, k) => `<button type="button" class="emo ${k === 0 ? 'on' : ''}" data-emo="${e}">${e}</button>`).join('')}</div>
+    <span class="lbl">Colour</span><div class="color-row">${HCOLORS.map((c, k) => `<button type="button" class="sw ${k === 0 ? 'on' : ''}" style="${colorVars(c)}" data-col="${c}" aria-label="${c}"></button>`).join('')}</div>
+    <button class="btn wide" type="submit">Add habit</button></form>`);
+  setTimeout(() => document.getElementById('h-name')?.focus(), 60);
 }
-function confirmSheet(text, act) {
-  sheet(`<div class="center">${mascot('sad', 80)}<h2>${text}</h2>
-    <button class="btn red wide" data-act="${act}">YES, DO IT</button><button class="btn ghost wide" data-close>CANCEL</button></div>`);
+function addBookSheet() {
+  sheet(`<h2>Add a book</h2><form id="book-form" class="form">
+    <label for="b-title">Title</label><input id="b-title" maxlength="80" required autocomplete="off" placeholder="e.g. An Inspector Calls">
+    <label for="b-author">Author</label><input id="b-author" maxlength="60" autocomplete="off" placeholder="Optional">
+    <label for="b-notes">Key idea or favourite quote</label><input id="b-notes" maxlength="120" autocomplete="off" placeholder="Optional">
+    <button class="btn wide" type="submit" style="${colorVars('purple')}">Add to bookshelf</button></form>`);
+  setTimeout(() => document.getElementById('b-title')?.focus(), 60);
 }
-
-/* ================= Lesson ================= */
-let L = null; // active lesson
-
-function startLesson(id) {
-  regenHearts();
-  if (S.hearts <= 0) return heartsSheet(true);
-  const lesson = allLessons().find((l) => l.id === id);
-  if (lesson.kind === 'play') return startChessLesson(lesson);
-  const qs = course().questions(lesson);
-  L = { id, lesson, queue: qs, total: qs.length, idx: 0, correct: 0, wrong: 0, sel: null, built: [], checked: false, started: Date.now(), match: null };
-  renderQuestion();
+function confirmSheet(text, act, mood = 'sad') {
+  sheet(`<div class="center">${mascot(mood, 84)}<h2>${text}</h2>
+    <button class="btn wide" style="${colorVars('red')}" data-act="${act}">Yes</button><button class="btn ghost wide" data-close>Cancel</button></div>`);
 }
 
-function renderQuestion() {
-  const q = L.queue[L.idx];
-  L.sel = null; L.built = []; L.checked = false;
-  if (q.type === 'match') L.match = { left: shuffleIdx(q.pairs.length), right: shuffleIdx(q.pairs.length), picked: null, solved: new Set() };
-  const progress = (L.correct / L.total) * 100;
-  const bubble = q.type === 'match' ? '' : `<div class="prompt-row">${mascot(q.type === 'build' ? 'think' : 'happy', 74)}<div class="bubble">
-      ${q.listen ? `<button class="speak big" data-speak="${esc(q.listen)}" aria-label="Play audio">🔊</button>` : ''}
-      ${q.sub ? `<span class="${q.mono ? 'mono' : ''}">${q.speak ? `<button class="speak" data-speak="${esc(q.speak)}" aria-label="Play audio">🔊</button> ` : ''}${esc(q.sub)}</span>` : q.speak && q.type !== 'pics' ? `<button class="speak" data-speak="${esc(q.speak)}">🔊</button>` : (q.listen ? '' : '<span>Pick the right answer</span>')}
-    </div></div>`;
-  let body = '';
-  if (q.type === 'mc') body = `${boardHTML(q.board)}<div class="opts">${q.options.map((o, k) => `<button class="opt ${q.mono ? 'mono' : ''}" data-opt="${k}"><kbd>${k + 1}</kbd>${esc(o.label)}</button>`).join('')}</div>`;
-  if (q.type === 'pics') body = `<div class="pics n${q.options.length}">${q.options.map((o, k) => `<button class="pic" data-opt="${k}"><span class="pic-e">${o.emoji}</span><span>${esc(o.label)}</span></button>`).join('')}</div>`;
-  if (q.type === 'build') body = `<div class="answer-line" id="built"></div><div class="tiles" id="bank">${q.tiles.map((t, k) => `<button class="tile ${q.mono ? 'mono' : ''}" data-tile="${k}">${esc(t)}</button>`).join('')}</div>`;
-  if (q.type === 'match') body = `<div class="match">
-      <div class="col">${L.match.left.map((k) => `<button class="tile mt" data-ml="${k}">${esc(q.pairs[k][0])}</button>`).join('')}</div>
-      <div class="col">${L.match.right.map((k) => `<button class="tile mt mono-ish" data-mr="${k}">${esc(q.pairs[k][1])}</button>`).join('')}</div></div>`;
-  $app.innerHTML = `<div class="lesson">
-    <header class="l-top"><button class="x" data-act="quit" aria-label="Quit lesson">✕</button>
-      <div class="pbar"><i style="width:${progress}%"></i></div><div class="l-hearts">❤️ ${S.hearts}</div></header>
-    <div class="l-body"><h2 class="q-title">${esc(q.prompt)}</h2>${bubble}${body}</div>
-    <footer class="l-foot" id="foot"><div class="foot-inner">
-      ${q.type === 'match' ? '<button class="btn ghost" data-act="skip">SKIP</button>' : '<span></span>'}
-      <button class="btn green" id="check" data-act="check" ${q.type === 'match' ? 'hidden' : 'disabled'}>CHECK</button>
-    </div></footer></div>`;
-  if (q.speak && q.type === 'pics') setTimeout(() => speak(q.speak), 250);
-  if (q.listen) setTimeout(() => speak(q.listen), 250);
-}
-function shuffleIdx(n) { const a = [...Array(n).keys()]; for (let i = n - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
-
-function updateBuilt() {
-  const q = L.queue[L.idx];
-  document.getElementById('built').innerHTML = L.built.map((k, pos) => `<button class="tile ${q.mono ? 'mono' : ''}" data-unbuild="${pos}">${esc(q.tiles[k])}</button>`).join('');
-  document.querySelectorAll('[data-tile]').forEach((b) => b.classList.toggle('used', L.built.includes(+b.dataset.tile)));
-  document.getElementById('check').disabled = L.built.length === 0;
-}
-
-function check() {
-  if (L.checked) return next();
-  const q = L.queue[L.idx];
-  let ok; let answerText;
-  if (q.type === 'build') {
-    ok = L.built.map((k) => q.tiles[k]).join(' ') === q.answer.join(' ');
-    answerText = q.answer.join(' ');
-  } else {
-    if (L.sel === null) return;
-    ok = L.sel === q.answer; answerText = q.options[q.answer].label;
-  }
-  feedback(ok, answerText);
-}
-
-function feedback(ok, answerText) {
-  const q = L.queue[L.idx];
-  L.checked = true;
-  if (ok) { L.correct++; sfx.good(); } else {
-    L.wrong++; sfx.bad(); S.hearts = Math.max(0, S.hearts - 1); if (S.hearts === MAX_HEARTS - 1) S.heartsAt = Date.now(); save();
-    L.queue.push(q); // retry later, Duolingo-style
-  }
-  document.querySelectorAll('[data-opt]').forEach((b) => {
-    b.disabled = true;
-    if (b.classList.contains('sel')) { b.classList.remove('sel'); if (!ok) b.classList.add('miss'); }
-    if (+b.dataset.opt === q.answer) b.classList.add('right');
-  });
-  const praise = ['Nice!', 'Great job!', 'Awesome!', 'Correct!', 'You got it!'][Math.floor(Math.random() * 5)];
-  document.querySelector('.l-hearts').textContent = `❤️ ${S.hearts}`;
-  document.querySelector('.pbar i').style.width = `${(L.correct / L.total) * 100}%`;
-  const foot = document.getElementById('foot');
-  foot.className = `l-foot ${ok ? 'ok' : 'no'}`;
-  foot.innerHTML = `<div class="foot-inner"><div class="fb"><span class="fb-ic">${ok ? '✔' : '✖'}</span><div><b>${ok ? praise : 'Correct answer:'}</b>${ok ? '' : `<p class="${q.mono ? 'mono' : ''}">${esc(answerText)}</p>`}${q.explain ? `<small class="explain">${esc(q.explain)}</small>` : ''}</div></div>
-    <button class="btn ${ok ? 'green' : 'red'}" id="check" data-act="check">${S.hearts <= 0 && !ok ? 'END LESSON' : 'CONTINUE'}</button></div>`;
-}
-
-function next() {
-  if (S.hearts <= 0) { L = null; render(); return heartsSheet(true); }
-  L.idx++;
-  if (L.idx >= L.queue.length) return finish();
-  renderQuestion();
-}
-
-function finish() {
-  const perfect = L.wrong === 0;
-  const xp = 10 + (perfect ? 5 : 0);
-  const first = !S.done[L.id];
-  S.done[L.id] = true; if (perfect) S.perfect = true;
-  S.gems += first ? 10 : 2;
-  addXP(xp);
-  const acc = Math.round((L.correct / (L.correct + L.wrong)) * 100);
-  const secs = Math.round((Date.now() - L.started) / 1000);
-  sfx.win();
-  $app.innerHTML = `<div class="done-screen">
-    <div class="confetti">${[...Array(28)].map((_, k) => `<i style="--l:${(k * 37) % 100}%;--d:${(k % 7) * 0.15}s;--c:${['#58cc02', '#1cb0f6', '#ffc800', '#ff4b4b', '#ce82ff'][k % 5]}"></i>`).join('')}</div>
-    ${mascot('cheer', 160)}
-    <h1>${perfect ? 'Perfect lesson!' : 'Lesson complete!'}</h1>
-    <div class="results">
-      <div class="res y"><small>TOTAL XP</small><b>⚡ ${xp}</b></div>
-      <div class="res g"><small>${acc >= 90 ? 'AMAZING' : 'ACCURACY'}</small><b>🎯 ${acc}%</b></div>
-      <div class="res b"><small>TIME</small><b>⏱ ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}</b></div>
-    </div>
-    <p class="muted">🔥 ${S.streak} day streak · +${first ? 10 : 2} 💎</p>
-    <button class="btn green wide" data-act="home">CONTINUE</button></div>`;
-  L = null;
-}
-
-/* ================= Chess games vs Hana ================= */
-const gameCallbacks = {
-  gems: () => S.gems,
-  sfx,
-  spendGems(n) { if (S.gems < n) { toast('Not enough gems. Win games to earn more!'); return false; } S.gems -= n; save(); return true; },
-  onQuit(clear) { confirmSheet('Leave this game? It won\'t count.', 'game-quit'); pendingQuit = clear; },
-  onFinish: gameFinished,
-};
+/* ================= Lessons & games ================= */
 let pendingQuit = null;
+const quitter = (clear) => { pendingQuit = clear; confirmSheet('Leave now? This won\'t count.', 'quit-yes'); };
 
-function startChessLesson(lesson) {
-  const g = gambitStart(lesson.play.key);
-  startGame({ fen: g.fen, side: g.side, level: lesson.play.level, title: g.name, idea: g.idea, prefix: g.moves, lessonId: lesson.id,
-    intro: `Let's play the <b>${esc(g.name)}</b>. You're ${g.side === 'w' ? 'White' : 'Black'}.<br><small>${esc(g.idea)}</small>` }, gameCallbacks);
+function begin(courseId, lessonId) {
+  const c = COURSES[courseId]; const l = lessonsOf(c).find((x) => x.id === lessonId);
+  S.course = courseId; save(); closeSheet();
+  if (l.kind === 'play') {
+    const g = gambitStart(l.play.key);
+    return startGame({ fen: g.fen, side: g.side, level: l.play.level, title: g.name, idea: g.idea, prefix: g.moves, lessonId: l.id,
+      intro: `Let's play the <b>${esc(g.name)}</b>. You're ${g.side === 'w' ? 'White' : 'Black'}.<br><small>${esc(g.idea)}</small>` }, gameCallbacks);
+  }
+  startLesson(c, l, { onDone: (r) => lessonDone(c, l, r), onQuit: quitter });
 }
-function startFreeGame(level) {
+
+function nextAfter(c, id) { const ls = lessonsOf(c); const i = ls.findIndex((x) => x.id === id); return ls[i + 1] || null; }
+
+function lessonDone(c, l, r) {
+  const first = !S.done[l.id];
+  S.done[l.id] = Math.max(starsOf(l.id), r.stars);
+  if (r.stars === 3) S.perfect = true;
+  const xp = 10 + r.stars * 2 + (r.bestCombo >= 5 ? 5 : 0);
+  const seeds = first ? 5 + r.stars : 1;
+  S.seeds += seeds; addXP(xp); sfx.win();
+  const nx = nextAfter(c, l.id);
+  doneScreen({ title: r.stars === 3 ? 'Flawless!' : 'Lesson complete!', stars: r.stars, mood: 'cheer', color: c.color,
+    chips: [['☀️', 'XP', xp, ''], ['🎯', 'First try', r.accuracy, '%'], ['🔥', 'Best combo', r.bestCombo, ''], ['🌱', 'Seeds', seeds, '']],
+    buttons: [nx ? `<button class="btn wide" style="${colorVars(c.color)}" data-start-next="${c.id}|${nx.id}">Next lesson</button>` : '',
+      `<button class="btn ${nx ? 'ghost' : ''} wide" style="${colorVars(c.color)}" data-act="to-course" data-course="${c.id}">Back to ${esc(c.name)}</button>`] });
+}
+
+function doneScreen({ title, sub = '', stars = 0, mood, color, chips, buttons, confetti = true }) {
+  $app.innerHTML = `<div class="done2" style="${colorVars(color)}">
+    ${confetti ? `<div class="confetti">${[...Array(32)].map((_, k) => `<i style="--l:${(k * 37) % 100}%;--d:${(k % 8) * 0.12}s;--r:${(k * 47) % 360}deg;--c:${['#58cc02', '#1cb0f6', '#ffc800', '#ff4b4b', '#ce82ff'][k % 5]}"></i>`).join('')}</div>` : ''}
+    <div class="done-hana">${mascot(mood, 150)}</div>
+    ${stars ? `<div class="big-stars">${[1, 2, 3].map((k) => `<i class="${k <= stars ? 'on' : ''}" style="--i:${k}">★</i>`).join('')}</div>` : ''}
+    <h1>${title}</h1>${sub ? `<p class="muted">${sub}</p>` : ''}
+    <div class="dchips">${chips.map(([e, label, v, suf], i) => `<div class="dchip" style="--i:${i}"><span>${e}</span><b data-count="${v}" data-suffix="${suf}">0</b><small>${label}</small></div>`).join('')}</div>
+    <div class="done-btns">${buttons.join('')}</div>
+  </div>`;
+  countUp($app);
+}
+
+const gameCallbacks = {
+  seeds: () => S.seeds,
+  sfx,
+  spendSeeds(n) { if (S.seeds < n) { toast('Not enough seeds. Finish lessons or win games to earn more.'); return false; } S.seeds -= n; save(); return true; },
+  onQuit: quitter,
+  onFinish: gameDone,
+};
+
+function startFree(level) {
   const side = Math.random() < 0.5 ? 'w' : 'b';
+  closeSheet();
   startGame({ side, level, title: 'Free play', intro: `New game! You're ${side === 'w' ? 'White, so you move first' : 'Black, so I move first'}.` }, gameCallbacks);
 }
 
-function gameFinished(r) {
+function gameDone(r) {
   const pass = r.result !== 'loss';
-  let xp = r.result === 'win' ? 15 + r.level * 5 : r.result === 'draw' ? 10 : 3;
-  let gems = r.result === 'win' ? 10 * r.level : 0;
-  if (r.lessonId && pass) { if (!S.done[r.lessonId]) gems += 10; S.done[r.lessonId] = true; }
-  if (r.result === 'loss' && r.lessonId) { S.hearts = Math.max(0, S.hearts - 1); if (S.hearts === MAX_HEARTS - 1) S.heartsAt = Date.now(); }
-  if (r.accuracy >= 90 && r.moves >= 10) S.perfect = true;
-  S.gems += gems; S.games = (S.games || 0) + 1; if (r.result === 'win') S.wins = (S.wins || 0) + 1;
-  addXP(xp);
+  const xp = r.result === 'win' ? 15 + r.level * 5 : r.result === 'draw' ? 10 : 3;
+  let seeds = r.result === 'win' ? 10 * r.level : r.result === 'draw' ? 3 : 0;
+  if (r.lessonId && pass) { if (!S.done[r.lessonId]) seeds += 10; S.done[r.lessonId] = Math.max(starsOf(r.lessonId), r.result === 'win' ? (r.accuracy >= 80 ? 3 : 2) : 1); }
+  if (r.result === 'win') S.wins = (S.wins || 0) + 1;
+  S.games.unshift({ date: new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'short' }), title: r.title, result: r.result, accuracy: r.accuracy, level: r.level, worst: r.worst });
+  S.games = S.games.slice(0, 20);
+  S.seeds += seeds; addXP(xp);
   if (pass) sfx.win(); else sfx.bad();
-  const title = r.result === 'win' ? 'You won!' : r.result === 'draw' ? 'Draw!' : 'Hana won';
-  const g = r.grades;
-  $app.innerHTML = `<div class="done-screen">
-    ${pass ? `<div class="confetti">${[...Array(28)].map((_, k) => `<i style="--l:${(k * 37) % 100}%;--d:${(k % 7) * 0.15}s;--c:${['#58cc02', '#1cb0f6', '#ffc800', '#ff4b4b', '#ce82ff'][k % 5]}"></i>`).join('')}</div>` : ''}
-    ${mascot(pass ? 'cheer' : 'sad', 150)}
-    <h1 class="${pass ? '' : 'lost'}">${title}</h1><p class="muted">${esc(r.how)} · ${r.moves} moves</p>
-    <div class="results">
-      <div class="res y"><small>XP</small><b>⚡ ${xp}</b></div>
-      <div class="res g"><small>ACCURACY</small><b>🎯 ${r.accuracy}%</b></div>
-      <div class="res b"><small>GEMS</small><b>💎 ${gems}</b></div>
-    </div>
-    <div class="grades">
-      <span class="grade g-best">⭐ ${g.best} best</span><span class="grade g-good">👍 ${g.good} good</span>
-      <span class="grade g-inacc">🤔 ${g.inacc}</span><span class="grade g-mistake">❗ ${g.mistake}</span><span class="grade g-blunder">💥 ${g.blunder}</span>
-    </div>
-    ${r.lessonId && !pass ? `<p class="muted">Win or draw to complete this lesson. −1 ❤️</p>` : ''}
-    ${r.lessonId && !pass && S.hearts > 0 ? `<button class="btn green wide" data-retry="${r.lessonId}">TRY AGAIN</button>` : ''}
-    ${!r.lessonId ? `<button class="btn green wide" data-free="${r.level}">PLAY AGAIN</button>` : ''}
-    <button class="btn ${!pass || !r.lessonId ? 'ghost' : 'green'} wide" data-act="home">CONTINUE</button></div>`;
+  const c = COURSES.chess; const nx = r.lessonId ? nextAfter(c, r.lessonId) : null;
+  doneScreen({ title: r.result === 'win' ? 'You won!' : r.result === 'draw' ? 'Draw!' : 'Hana won this one', sub: `${esc(r.how)} · ${r.moves} moves`,
+    mood: pass ? 'cheer' : 'sad', color: pass ? 'green' : 'red', confetti: pass,
+    chips: [['☀️', 'XP', xp, ''], ['🎯', 'Accuracy', r.accuracy, '%'], ['⭐', 'Best moves', r.grades.best, ''], ['🌱', 'Seeds', seeds, '']],
+    buttons: [
+      r.worst ? `<p class="review-note">Watch out for <span class="mono">${esc(r.worst.move)}${esc(r.worst.san)}</span> (${esc(r.worst.label)})${r.worst.best ? `. <span class="mono">${esc(r.worst.best)}</span> was better.` : '.'}</p>` : '',
+      r.lessonId && !pass ? `<button class="btn wide" data-start-next="chess|${r.lessonId}">Try again</button>` : '',
+      r.lessonId && pass && nx ? `<button class="btn wide" data-start-next="chess|${nx.id}">Next game</button>` : '',
+      !r.lessonId ? `<button class="btn wide" data-free="${r.level}">Play again</button>` : '',
+      `<button class="btn ghost wide" data-act="${r.lessonId ? 'to-course' : 'home'}" data-course="chess">Continue</button>`] });
 }
 
 /* ================= Events ================= */
@@ -453,100 +372,80 @@ window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); inst
 document.addEventListener('click', (e) => {
   const t = e.target.closest('button'); if (!t) return;
   const d = t.dataset;
-  if (d.speak) { e.stopPropagation(); return speak(d.speak); }
-  if (d.ob) { S.onboarded = true; if (d.ob === 'habits') S.tab = 'habits'; else { S.course = d.ob; S.tab = 'learn'; } save(); return render(); }
-  if (d.tab) { S.tab = d.tab; save(); sfx.tap(); return render(); }
-  if (d.course) { S.course = d.course; S.tab = 'learn'; save(); closeSheet(); return render(); }
-  if (d.guide) return guideSheet(+d.guide);
-  if (d.free) return startFreeGame(+d.free);
-  if (d.retry) return startLesson(d.retry);
-  if (d.goal) { S.dailyGoal = +d.goal; save(); return render(); }
+  if (d.ob) {
+    S.onboarded = true;
+    if (d.ob === 'habits') S.tab = 'today';
+    else if (d.ob === 'chess') { S.tab = 'learn'; openCourse = 'chess'; }
+    else { S.tab = 'learn'; S.lib = d.ob; }
+    save(); return render();
+  }
+  if (d.tab) { S.tab = d.tab; openCourse = null; save(); sfx.tap(); return render(); }
+  if (d.open) { openCourse = d.open; S.course = d.open; save(); sfx.tap(); return render(); }
+  if (d.lib) { S.lib = d.lib; save(); return render(); }
+  if (d.guide) return guideSheet(COURSES[openCourse], +d.guide);
   if (d.lesson) {
-    if (t.getAttribute('aria-disabled')) return toast('Finish the lessons above to unlock this one');
-    return startLesson(d.lesson);
+    const c = COURSES[openCourse];
+    if (!unlocked(c, d.lesson)) { t.classList.remove('nope'); void t.offsetWidth; t.classList.add('nope'); return toast('Finish the lesson before this one to unlock it'); }
+    sfx.tap(); return lessonSheet(c, d.lesson);
   }
-  if (d.chest) {
-    if (S.chests[d.chest]) return toast('Already opened');
-    const [cid, ui] = d.chest.split(':'); const u = COURSES[cid].units[+ui];
-    if (!u.lessons.every((l) => S.done[l.id])) return toast('Finish this unit to open the chest');
-    S.chests[d.chest] = true; S.gems += 50; save(); sfx.win(); render(); return toast('+50 💎 from the chest!');
-  }
+  if (d.start) return begin(openCourse, d.start);
+  if (d.startNext) { const [cid, lid] = d.startNext.split('|'); openCourse = cid; return begin(cid, lid); }
+  if (d.free) return startFree(+d.free);
+  if (d.goal) { S.dailyGoal = +d.goal; save(); return render(); }
   if (d.habit) {
     const h = S.habits.find((x) => x.id === d.habit); const t0 = today();
-    if (h.log[t0]) { delete h.log[t0]; save(); } else { h.log[t0] = true; sfx.good(); addXP(5); }
+    if (h.log[t0]) { delete h.log[t0]; save(); } else { h.log[t0] = true; sfx.good(); burst(t); addXP(5); }
     return render();
   }
   if (d.delhabit) { S.habits = S.habits.filter((x) => x.id !== d.delhabit); save(); return render(); }
+  if (d.book) {
+    const b = S.books.find((x) => x.id === d.book); b.status = { want: 'reading', reading: 'done', done: 'want' }[b.status];
+    if (b.status === 'done') { sfx.win(); burst(t); addXP(10); toast('Finished a book! +10 XP'); }
+    save(); return render();
+  }
+  if (d.delbook) { S.books = S.books.filter((x) => x.id !== d.delbook); save(); return render(); }
   if (d.emo) { document.querySelectorAll('.emo').forEach((b) => b.classList.toggle('on', b === t)); return; }
   if (d.col) { document.querySelectorAll('.sw').forEach((b) => b.classList.toggle('on', b === t)); return; }
 
-  if (L && !L.checked) {
-    const q = L.queue[L.idx];
-    if (d.opt !== undefined) { L.sel = +d.opt; sfx.tap(); document.querySelectorAll('[data-opt]').forEach((b) => b.classList.toggle('sel', b === t)); document.getElementById('check').disabled = false; const o = q.options[L.sel]; if (o.speak) speak(o.speak); return; }
-    if (d.tile !== undefined) { if (!L.built.includes(+d.tile)) { L.built.push(+d.tile); sfx.tap(); updateBuilt(); } return; }
-    if (d.unbuild !== undefined) { L.built.splice(+d.unbuild, 1); updateBuilt(); return; }
-    if (d.ml !== undefined || d.mr !== undefined) return matchTap(t, d);
-  }
-
   switch (d.act) {
-    case 'courses': return coursesSheet();
-    case 'hearts': return heartsSheet();
-    case 'refill': if (S.gems >= 350) { S.gems -= 350; S.hearts = MAX_HEARTS; save(); closeSheet(); render(); toast('Hearts refilled!'); } return;
+    case 'back': openCourse = null; return render();
+    case 'to-course': openCourse = d.course; return render();
+    case 'home': openCourse = null; return render();
     case 'addhabit': return addHabitSheet();
+    case 'addbook': return addBookSheet();
     case 'sound': S.sound = !S.sound; save(); return render();
     case 'install': installPrompt?.prompt(); installPrompt = null; return;
     case 'reset': return confirmSheet('Reset all progress?', 'reset-yes');
-    case 'reset-yes': try { localStorage.removeItem(KEY); } catch { /* ignore */ } S = structuredClone(DEFAULT); closeSheet(); return render();
-    case 'check': return check();
-    case 'skip': L.correct++; return next();
-    case 'quit': return confirmSheet('Quit? You\'ll lose this lesson\'s progress.', 'quit-yes');
-    case 'quit-yes': L = null; closeSheet(); return render();
-    case 'home': return render();
-    case 'game-quit': closeSheet(); pendingQuit?.(); pendingQuit = null; return render();
+    case 'reset-yes': reset(); openCourse = null; closeSheet(); return render();
+    case 'quit-yes': closeSheet(); pendingQuit?.(); pendingQuit = null; return render();
   }
 });
 
-function matchTap(t, d) {
-  const q = L.queue[L.idx]; const m = L.match;
-  if (t.classList.contains('solved')) return;
-  const side = d.ml !== undefined ? 'l' : 'r'; const k = +(d.ml ?? d.mr);
-  if (side === 'l' && q.pairs[k] && /[a-záéíóúñ]/.test(q.pairs[k][0]) && S.course === 'es') speak(q.pairs[k][0]);
-  if (!m.picked || m.picked.side === side) {
-    document.querySelectorAll('.mt.sel').forEach((b) => b.classList.remove('sel'));
-    t.classList.add('sel'); m.picked = { side, k, el: t }; sfx.tap(); return;
+document.addEventListener('input', (e) => {
+  if (e.target.id === 'lib-q') {
+    const q = e.target.value.trim().toLowerCase(); let any = false;
+    document.querySelectorAll('.cat').forEach((sec) => {
+      let n = 0;
+      sec.querySelectorAll('.ccard').forEach((cd) => { const hit = !q || cd.dataset.name.includes(q); cd.hidden = !hit; if (hit) n++; });
+      sec.hidden = n === 0; if (n) any = true;
+    });
+    document.getElementById('no-results').hidden = any;
   }
-  const a = m.picked; m.picked = null;
-  if (a.k === k) {
-    [a.el, t].forEach((b) => { b.classList.remove('sel'); b.classList.add('solved'); }); m.solved.add(k); sfx.good();
-    if (m.solved.size === q.pairs.length) feedback(true, '');
-  } else {
-    [a.el, t].forEach((b) => { b.classList.remove('sel'); b.classList.add('wrong'); setTimeout(() => b.classList.remove('wrong'), 400); });
-    sfx.bad();
-  }
-}
+  if (e.target.id === 'set-name') { S.name = e.target.value.trim(); save(); }
+});
 
 document.addEventListener('submit', (e) => {
-  if (e.target.id !== 'habit-form') return;
   e.preventDefault();
-  const name = document.getElementById('h-name').value.trim(); if (!name) return;
-  S.habits.push({ id: 'h' + Date.now(), name, emoji: document.querySelector('.emo.on')?.dataset.emo || '⭐', color: document.querySelector('.sw.on')?.dataset.col || 'green', log: {} });
-  save(); closeSheet(); S.tab = 'habits'; render();
+  if (e.target.id === 'habit-form') {
+    const name = document.getElementById('h-name').value.trim(); if (!name) return;
+    S.habits.push({ id: `h${Date.now()}`, name, emoji: document.querySelector('.emo.on')?.dataset.emo || '⭐', color: document.querySelector('.sw.on')?.dataset.col || 'green', log: {} });
+  }
+  if (e.target.id === 'book-form') {
+    const title = document.getElementById('b-title').value.trim(); if (!title) return;
+    S.books.unshift({ id: `b${Date.now()}`, title, author: document.getElementById('b-author').value.trim(), notes: document.getElementById('b-notes').value.trim(), status: 'reading' });
+  }
+  save(); closeSheet(); S.tab = 'today'; openCourse = null; render();
 });
-
-document.addEventListener('keydown', (e) => {
-  if (!L || document.querySelector('.sheet-back')) return;
-  if (e.key === 'Enter') { e.preventDefault(); document.getElementById('check')?.click(); }
-  if (/^[1-4]$/.test(e.key)) document.querySelector(`[data-opt="${+e.key - 1}"]`)?.click();
-});
-
-let toastT;
-function toast(msg) {
-  document.querySelector('.toast')?.remove(); clearTimeout(toastT);
-  const el = document.createElement('div'); el.className = 'toast'; el.textContent = msg; document.body.appendChild(el);
-  toastT = setTimeout(() => el.remove(), 2200);
-}
-
-setInterval(() => { if (!L && S.onboarded && S.hearts < MAX_HEARTS) { const h = S.hearts; regenHearts(); if (h !== S.hearts) { save(); render(); } } }, 60000);
 
 render();
 

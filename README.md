@@ -1,17 +1,20 @@
 # 🌱 Sprout
 
-A playful, cartoon-style learning app with chunky buttons, a lesson path, streaks, hearts, XP and a guide: **Hana**, an original chibi anime girl with a sprout for an ahoge.
+A bright, chunky, cartoon-style learning app with its own layout: a home screen, a course library, a garden that grows as you learn, and a profile. Your guide is **Hana**, an original chibi anime girl with a sprout for an ahoge.
 
-**What's inside**
+## What's inside
 
-| Tab | What it does |
+| Area | What it does |
 | --- | --- |
-| **Chess** | Play real games against Hana, an AI that runs on your phone (Easy / Medium / Hard). Each lesson starts from one of 43 gambits from the Meridium library; win or draw to pass. Hana grades every move (Best, Good, Inaccuracy, Mistake, Blunder) and suggests a better move. Hints and take-backs cost gems. Each unit ends with a short review quiz. **Free play** starts a full game from move one. |
-| **GCSE History** | The Cold War (1945–1991) in 3 units, built from your *Cold War Revision Starter* Obsidian note: dates, causes, putting events in order, matching years to events. |
-| **Spanish** course | 4 units (Basics, Food, Animals, Family). Picture cards, listening (🔊 uses your phone's Spanish voice), sentence building, matching pairs. |
-| **Habits** | Daily check-ins with per-habit streaks and a 7-day history. Each check-in earns 5 XP. |
+| **Today** | Animated sky scene (morning, day, evening or night), daily XP goal ring, streak, a "Continue" card, daily habits and a bookshelf (from the Reading Dashboard note). |
+| **Library** | 43 courses with search and filters: School, Languages, Chess. |
+| **School (GCSE)** | Maths, English Language, English Literature, Biology, Chemistry, Physics, History (Cold War, from the *Cold War Revision Starter* note), Geography and Computer Science. 4–5 lessons each, with key-term matching and explanations. Starter content: check it against your exam board's specification. |
+| **Languages** | 33 languages: Spanish, French, German, Italian, Portuguese, Dutch, Swedish, Norwegian, Danish, Finnish, Polish, Czech, Croatian, Romanian, Hungarian, Greek, Turkish, Russian, Ukrainian, Arabic, Hebrew, Persian, Hindi, Japanese, Korean, Chinese, Vietnamese, Thai, Indonesian, Tagalog, Swahili, Welsh and Irish. 5 chapters each (greetings, food, animals, family, numbers) with picture questions, listening (uses your phone's voices when it has one for that language), spelling with letter tiles, romanisation for non-Latin scripts, and sentence building for Spanish, French, German and Italian. |
+| **Chess** | Play real games against Hana, an on-device AI (Easy, Medium, Hard), starting from 43 gambits. Every move is graded with a better-move suggestion; pieces slide; hints and take-backs cost seeds. Free play mode. Each game is logged for review with the one mistake to avoid next time (from the Chess Dashboard note). |
+| **Garden** | Every course you start grows a plant, from seed to flower as you finish lessons. |
+| **Me** | Stats, weekly XP chart, badges, chess game review and settings. |
 
-Mistakes cost a heart and the question comes back at the end of the lesson. Hearts refill over time (1 every 20 min) or with gems. Progress is saved on the device.
+Lessons show one question card at a time with instant feedback, combo streaks, progress dots, and Hana reacting in the corner. Missed questions come back at the end, and finished lessons earn 1–3 stars.
 
 ## Get it on your phone
 
@@ -48,10 +51,14 @@ npm run android:apk  # → android/app/build/outputs/apk/debug/app-debug.apk
 
 ## Code map
 - `www/index.html`, `www/css/style.css`: the app shell and the whole visual style
-- `www/js/app.js`: screens, lesson engine, hearts/XP/streaks, habits
+- `www/js/app.js`: screens (Today, Library, Course, Garden, Me), sheets, results
+- `www/js/lesson.js`: the lesson player
+- `www/js/store.js`: saved progress, sounds, speech, animation helpers
+- `www/js/art.js`: hand-drawn SVG subject icons, the sky scene and garden plants
+- `www/js/content/`: GCSE subjects and the 33-language word lists
 - `www/js/game.js`: the chess game screen vs Hana
 - `www/js/engine-worker.js`: the chess AI (alpha-beta search in a Web Worker, with a time limit per move)
-- `www/js/courses.js`: course units and question generators (chess, GCSE History, Spanish)
+- `www/js/courses.js`: builds every course and its question generators
 - `www/js/gambits.js`: opening data (generated from `scripts/gambits_data.json`)
 - `www/js/mascot.js`: Hana, drawn as SVG with four moods (happy, cheer, sad, think)
 - `www/vendor/chess.js`: [chess.js](https://github.com/jhlywa/chess.js) 1.4.0 (BSD-2-Clause) for boards and legal moves

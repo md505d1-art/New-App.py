@@ -1,6 +1,6 @@
 // Hana — Sprout's original chibi anime-girl mascot, drawn as inline SVG.
 // Her ahoge (the hair strand on top) is a little sprout.
-// mood: 'happy' | 'cheer' | 'sad' | 'think'
+// mood: 'happy' | 'cheer' | 'sad' | 'think' | 'wave'
 let uid = 0;
 export function mascot(mood = 'happy', size = 120) {
   const id = `h${++uid}`;
@@ -9,13 +9,13 @@ export function mascot(mood = 'happy', size = 120) {
   const eye = (cx, dir) => {
     if (mood === 'cheer') return `<path d="M${cx - 9} ${60} Q${cx} ${50} ${cx + 9} ${60}" stroke="${LINE}" stroke-width="3.6" fill="none" stroke-linecap="round"/>`;
     const lx = mood === 'think' ? 2.5 : 0; const ly = mood === 'think' ? -2 : mood === 'sad' ? 1.5 : 0;
-    return `<ellipse cx="${cx}" cy="59" rx="9" ry="11" fill="#fff"/>
+    return `<g class="eye"><ellipse cx="${cx}" cy="59" rx="9" ry="11" fill="#fff"/>
       <ellipse cx="${cx + lx}" cy="${60 + ly}" rx="7.4" ry="9.6" fill="url(#${id}i)"/>
       <ellipse cx="${cx + lx}" cy="${61 + ly}" rx="3.6" ry="4.8" fill="#163a1c"/>
       <circle cx="${cx + lx - 3}" cy="${56 + ly}" r="3" fill="#fff"/>
       <circle cx="${cx + lx + 3}" cy="${64 + ly}" r="1.5" fill="#fff" opacity=".9"/>
       <path d="M${cx - 10} ${51} Q${cx} ${44} ${cx + 10} ${50}" stroke="${LINE}" stroke-width="3.4" fill="none" stroke-linecap="round"/>
-      <path d="M${dir < 0 ? cx - 10 : cx + 10} ${dir < 0 ? 51 : 50} l${dir * 3} -2.5" stroke="${LINE}" stroke-width="2.4" stroke-linecap="round"/>`;
+      <path d="M${dir < 0 ? cx - 10 : cx + 10} ${dir < 0 ? 51 : 50} l${dir * 3} -2.5" stroke="${LINE}" stroke-width="2.4" stroke-linecap="round"/></g>`;
   };
   const brows = mood === 'sad'
     ? `<path d="M38 42 L52 46" stroke="${HAIR}" stroke-width="2.4" stroke-linecap="round"/><path d="M82 42 L68 46" stroke="${HAIR}" stroke-width="2.4" stroke-linecap="round"/>`
@@ -25,6 +25,7 @@ export function mascot(mood = 'happy', size = 120) {
     cheer: `<path d="M53 72 Q60 84 67 72 Z" fill="#8a2a3b"/><path d="M56 78 Q60 81 64 78 Q60 76 56 78Z" fill="#ff8fa3"/>`,
     sad: `<path d="M55 78 Q57.5 75 60 77 Q62.5 75 65 78" stroke="${LINE}" stroke-width="2.2" fill="none" stroke-linecap="round"/>`,
     think: `<ellipse cx="64" cy="76" rx="2.6" ry="2.2" fill="#8a2a3b"/>`,
+    wave: `<path d="M54 73 Q60 82 66 73 Z" fill="#8a2a3b"/><path d="M57 78 Q60 80 63 78 Q60 76.5 57 78Z" fill="#ff8fa3"/>`,
   }[mood];
   const extra = mood === 'sad'
     ? '<path d="M37 68 Q34 74 37 77 Q40 74 37 68Z" fill="#7cc8ff"/>'
@@ -32,7 +33,9 @@ export function mascot(mood = 'happy', size = 120) {
   const arms = mood === 'cheer'
     ? `<path d="M40 104 Q26 94 22 78" stroke="#fff" stroke-width="10" fill="none" stroke-linecap="round"/><circle cx="21" cy="75" r="6" fill="${SKIN}" stroke="${SKIN_S}" stroke-width="1.5"/>
        <path d="M80 104 Q94 94 98 78" stroke="#fff" stroke-width="10" fill="none" stroke-linecap="round"/><circle cx="99" cy="75" r="6" fill="${SKIN}" stroke="${SKIN_S}" stroke-width="1.5"/>`
-    : '';
+    : mood === 'wave'
+      ? `<g class="wave-arm"><path d="M80 104 Q94 96 99 80" stroke="#fff" stroke-width="10" fill="none" stroke-linecap="round"/><circle cx="100" cy="76" r="6.5" fill="${SKIN}" stroke="${SKIN_S}" stroke-width="1.5"/></g>`
+      : '';
 
   return `<svg class="mascot mascot-${mood}" width="${size}" height="${size}" viewBox="0 0 120 130" role="img" aria-label="Hana, the Sprout guide">
     <defs>

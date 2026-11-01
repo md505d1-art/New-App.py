@@ -1,6 +1,8 @@
 // Course definitions and question generators.
 import G from './gambits.js';
 import { Chess } from '../vendor/chess.js';
+import { LANGS, LANG_UNITS, wordsOf } from './content/languages.js';
+import { SUBJECTS } from './content/gcse.js';
 
 const shuffle = (a) => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const pick = (a, n) => shuffle(a).slice(0, n);
@@ -101,69 +103,6 @@ export function gambitStart(key) {
 }
 export { G as GAMBITS };
 
-/* ---------------- Spanish ---------------- */
-
-const ES_UNITS = [
-  { title: 'Basics', desc: 'Say hello and be polite', color: 'green', lessons: [
-    { words: [['hola', 'hello', '👋'], ['adiós', 'goodbye', '🚪'], ['gracias', 'thank you', '🙏'], ['por favor', 'please', '🥺']],
-      phrases: [['hello, thank you', 'hola, gracias'], ['goodbye, please', 'adiós, por favor']] },
-    { words: [['sí', 'yes', '👍'], ['no', 'no', '👎'], ['buenos días', 'good morning', '🌅'], ['buenas noches', 'good night', '🌙']],
-      phrases: [['yes, good morning', 'sí, buenos días'], ['no, thank you', 'no, gracias']] },
-  ] },
-  { title: 'Food', desc: 'Order like a local', color: 'yellow', lessons: [
-    { words: [['el pan', 'the bread', '🍞'], ['el agua', 'the water', '💧'], ['la manzana', 'the apple', '🍎'], ['la leche', 'the milk', '🥛']],
-      phrases: [['I drink water', 'yo bebo agua'], ['I eat bread', 'yo como pan']] },
-    { words: [['el queso', 'the cheese', '🧀'], ['el café', 'the coffee', '☕'], ['el huevo', 'the egg', '🥚'], ['la naranja', 'the orange', '🍊']],
-      phrases: [['the coffee is hot', 'el café está caliente'], ['I want an orange', 'quiero una naranja']] },
-  ] },
-  { title: 'Animals', desc: 'Pets and farm friends', color: 'blue', lessons: [
-    { words: [['el gato', 'the cat', '🐱'], ['el perro', 'the dog', '🐶'], ['el pájaro', 'the bird', '🐦'], ['el pez', 'the fish', '🐟']],
-      phrases: [['the cat drinks milk', 'el gato bebe leche'], ['I have a dog', 'tengo un perro']] },
-    { words: [['el caballo', 'the horse', '🐴'], ['la vaca', 'the cow', '🐮'], ['el cerdo', 'the pig', '🐷'], ['la oveja', 'the sheep', '🐑']],
-      phrases: [['the cow is big', 'la vaca es grande'], ['the horse eats', 'el caballo come']] },
-  ] },
-  { title: 'Family', desc: 'Talk about the people you love', color: 'purple', lessons: [
-    { words: [['la madre', 'the mother', '👩'], ['el padre', 'the father', '👨'], ['el hermano', 'the brother', '👦'], ['la hermana', 'the sister', '👧']],
-      phrases: [['my mother is kind', 'mi madre es amable'], ['I have a sister', 'tengo una hermana']] },
-    { words: [['el abuelo', 'the grandfather', '👴'], ['la abuela', 'the grandmother', '👵'], ['el bebé', 'the baby', '👶'], ['la familia', 'the family', '👨‍👩‍👧']],
-      phrases: [['the baby sleeps', 'el bebé duerme'], ['my family is big', 'mi familia es grande']] },
-  ] },
-];
-const ES_ALL = ES_UNITS.flatMap((u) => u.lessons.flatMap((l) => l.words));
-const ES_FILLER = ['el', 'la', 'es', 'yo', 'un', 'mi', 'come', 'bebe', 'pequeño', 'tengo', 'está', 'muy'];
-
-function spanishQuestions(lesson) {
-  const qs = [];
-  const words = lesson.words;
-  for (const w of words) {
-    const others = ES_ALL.filter((x) => x[0] !== w[0]);
-    const pics = shuffle([w, ...pick(others, 3)]);
-    qs.push({ type: 'pics', prompt: `Which one is “${w[0]}”?`, speak: w[0],
-      options: pics.map((x) => ({ label: x[0], emoji: x[2], speak: x[0] })), answer: pics.indexOf(w) });
-    const tr = shuffle([w, ...pick(others, 3)]);
-    if (Math.random() < 0.5) {
-      qs.push({ type: 'mc', prompt: `How do you say “${w[1]}”?`, options: tr.map((x) => ({ label: x[0], speak: x[0] })), answer: tr.indexOf(w) });
-    } else {
-      qs.push({ type: 'mc', prompt: 'What do you hear?', listen: w[0], options: tr.map((x) => ({ label: x[1] })), answer: tr.indexOf(w) });
-    }
-  }
-  for (const [en, es] of lesson.phrases) {
-    const toks = es.replace(',', ' ,').split(' ').filter((t) => t !== ',');
-    qs.push({ type: 'build', prompt: 'Translate this sentence', sub: en, speak: es,
-      tiles: shuffle([...toks, ...pick(ES_FILLER.filter((f) => !toks.includes(f)), 3)]), answer: toks });
-  }
-  qs.push({ type: 'match', prompt: 'Tap the matching pairs', pairs: words.map((w) => [w[0], w[1]]) });
-  return shuffle(qs.slice(0, -1)).concat(qs.slice(-1));
-}
-
-function buildSpanish() {
-  return ES_UNITS.map((u, ui) => ({
-    title: u.title, desc: u.desc, color: u.color,
-    guide: u.lessons.flatMap((l) => l.words.map((w) => ({ term: `${w[2]} ${w[0]}`, def: w[1] }))),
-    lessons: u.lessons.map((l, li) => ({ id: `es:${ui}:${li}`, title: l.words.map((w) => w[0]).join(', '), ...l })),
-  }));
-}
-
 /* ---------------- GCSE History: Cold War (from your "Cold War Revision Starter" note) ---------------- */
 
 const CW_UNITS = [
@@ -257,9 +196,100 @@ function buildFacts(prefix, units) {
   }));
 }
 
-export const COURSES = {
-  chess: { id: 'chess', name: 'Chess', icon: '♞', units: buildChess(), questions: chessQuestions },
-  history: { id: 'history', name: 'GCSE History', icon: '📜', units: buildFacts('cw', CW_UNITS), questions: factsQuestions,
-    note: 'Built from your Cold War Revision Starter note. Check it against your AQA specification.' },
-  es: { id: 'es', name: 'Spanish', icon: '🇪🇸', units: buildSpanish(), questions: spanishQuestions },
-};
+/* ---------------- Languages ---------------- */
+
+let seg = null;
+function graphemes(str) {
+  try { seg = seg || new Intl.Segmenter(undefined, { granularity: 'grapheme' }); return [...seg.segment(str)].map((x) => x.segment); } catch { return [...str]; }
+}
+
+function langQuestions(lesson, course) {
+  const all = course.words; const words = lesson.words;
+  const qs = [];
+  // Unique by spelling, so words like French "bonjour" (hello / good morning) never appear twice.
+  const others = (w) => all.filter((x, i) => x.t !== w.t && x.en !== w.en && all.findIndex((y) => y.t === x.t) === i);
+  const opt = (x) => ({ label: x.t, sub: x.rom, speak: x.t, native: true });
+  words.forEach((w, i) => {
+    const pics = shuffle([w, ...pick(others(w), 3)]);
+    qs.push({ type: 'pics', kicker: 'Picture match', prompt: `Which picture is “${w.t}”?`, sub: w.rom, speak: w.t, native: true,
+      options: pics.map((x) => ({ label: x.en, emoji: x.emoji })), answer: pics.indexOf(w) });
+    const o = shuffle([w, ...pick(others(w), 3)]);
+    const mode = i % 3;
+    if (mode === 0) qs.push({ type: 'mc', kicker: 'Translate', prompt: `How do you say “${w.en}”?`, emoji: w.emoji, options: o.map(opt), answer: o.indexOf(w) });
+    else if (mode === 1) qs.push({ type: 'mc', kicker: 'Listen', listen: w.t, fallback: `What does “${w.t}” mean?`, prompt: 'What do you hear?', options: o.map((x) => ({ label: x.en })), answer: o.indexOf(w) });
+    else qs.push({ type: 'mc', kicker: 'Translate', prompt: `What does “${w.t}” mean?`, sub: w.rom, speak: w.t, native: true, options: o.map((x) => ({ label: x.en })), answer: o.indexOf(w) });
+    const g = graphemes(w.t);
+    if (i % 2 === 0 && !w.t.includes(' ') && g.length >= 2 && g.length <= 9) {
+      const pool = [...new Set(all.flatMap((x) => graphemes(x.t.replace(/\s/g, ''))))].filter((c) => !g.includes(c));
+      qs.push({ type: 'build', kicker: 'Spell it', prompt: `Spell “${w.en}”`, emoji: w.emoji, sub: w.rom, tiles: shuffle([...g, ...pick(pool, 3)]), answer: g, join: '', native: true });
+    }
+  });
+  for (const [en, tr] of lesson.phrases || []) {
+    const toks = tr.split(' ');
+    const extra = pick([...new Set(all.map((x) => x.t))].filter((t) => !t.includes(' ') && !toks.includes(t)), 3);
+    qs.push({ type: 'build', kicker: 'Build the sentence', prompt: 'Translate this sentence', sub: en, speak: tr, tiles: shuffle([...toks, ...extra]), answer: toks, join: ' ', native: true });
+  }
+  const seen = new Set();
+  qs.push({ type: 'match', kicker: 'Pairs', prompt: 'Tap the matching pairs', native: true,
+    pairs: words.filter((w) => !seen.has(w.t) && seen.add(w.t)).map((w) => [w.t, w.en]) });
+  return shuffle(qs.slice(0, -1)).concat(qs.slice(-1));
+}
+
+const PALETTE = ['green', 'blue', 'purple', 'red', 'yellow'];
+
+function buildLanguage(lang, idx) {
+  const words = wordsOf(lang);
+  const course = { id: `lang:${lang.code}`, cat: 'language', name: lang.name, sub: lang.native, flag: lang.flag, icon: 'language',
+    color: PALETTE[idx % PALETTE.length], tts: lang.tts, rtl: !!lang.rtl, note: lang.note, words };
+  course.units = LANG_UNITS.map((u, ui) => {
+    const uw = words.slice(u.from, u.from + 8);
+    return { title: u.title, desc: u.desc, color: u.color,
+      guide: uw.map((w) => ({ term: `${w.emoji} ${w.t}${w.rom ? ` (${w.rom})` : ''}`, def: w.en })),
+      lessons: [0, 1].map((li) => ({ id: `${course.id}:${ui}:${li}`, title: `${u.title} ${li + 1}`, words: uw.slice(li * 4, li * 4 + 4),
+        phrases: lang.phrases?.[ui] ? [lang.phrases[ui][li]] : [] })) };
+  });
+  course.questions = (l) => langQuestions(l, course);
+  return course;
+}
+
+/* ---------------- GCSE subjects ---------------- */
+
+function quizQuestions(lesson) {
+  const qs = lesson.qs.map(([q, a, wrong, explain]) => {
+    const o = shuffle([a, ...wrong]);
+    return { type: 'mc', kicker: lesson.title, prompt: q, options: o.map((label) => ({ label })), answer: o.indexOf(a), explain };
+  });
+  const [term, def] = lesson.terms[Math.floor(Math.random() * lesson.terms.length)];
+  const defs = shuffle(lesson.terms.map((t) => t[1]));
+  qs.push({ type: 'mc', kicker: 'Key term', prompt: `What does “${term}” mean?`, options: defs.map((label) => ({ label })), answer: defs.indexOf(def) });
+  qs.push({ type: 'match', kicker: 'Key terms', prompt: 'Match each term to its meaning', pairs: lesson.terms });
+  return shuffle(qs.slice(0, -1)).concat(qs.slice(-1));
+}
+
+function buildSubject(s, idx) {
+  return { id: `gcse:${s.id}`, cat: 'school', name: s.name, sub: 'GCSE', icon: s.icon, color: s.color, note: s.note,
+    units: s.units.map((u, ui) => ({ title: u.title, desc: u.desc, color: PALETTE[(idx + ui) % PALETTE.length],
+      guide: u.lessons.flatMap((l) => l.terms.map(([term, def]) => ({ term, def }))),
+      lessons: u.lessons.map((l, li) => ({ id: `gcse:${s.id}:${ui}:${li}`, ...l })) })),
+    questions: quizQuestions };
+}
+
+/* ---------------- Catalogue ---------------- */
+
+const history = { id: 'history', cat: 'school', name: 'History', sub: 'Cold War · from your notes', icon: 'history', color: 'red',
+  units: buildFacts('cw', CW_UNITS), questions: factsQuestions,
+  note: 'Built from your Cold War Revision Starter note. Check it against your AQA specification.' };
+const subjects = SUBJECTS.map(buildSubject);
+subjects.splice(subjects.findIndex((c) => c.id === 'gcse:geography'), 0, history);
+
+export const COURSES = Object.fromEntries([
+  { id: 'chess', cat: 'chess', name: 'Chess', sub: 'Play gambits vs Hana', icon: 'chess', color: 'green', units: buildChess(), questions: chessQuestions },
+  ...subjects,
+  ...LANGS.map(buildLanguage),
+].map((c) => [c.id, c]));
+
+export const CATEGORIES = [
+  { id: 'school', name: 'School', blurb: 'GCSE subjects for Year 11' },
+  { id: 'language', name: 'Languages', blurb: `${LANGS.length} languages to start` },
+  { id: 'chess', name: 'Chess', blurb: 'Train against an AI coach' },
+];

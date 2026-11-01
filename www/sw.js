@@ -1,6 +1,7 @@
 // Offline support: precache the app shell, then cache-first with background refresh.
-const CACHE = 'sprout-v2';
-const SHELL = ['./', 'index.html', 'css/style.css', 'js/app.js', 'js/courses.js', 'js/gambits.js', 'js/mascot.js', 'js/game.js', 'js/engine-worker.js',
+const CACHE = 'sprout-v3';
+const SHELL = ['./', 'index.html', 'css/style.css', 'js/app.js', 'js/store.js', 'js/courses.js', 'js/lesson.js', 'js/art.js',
+  'js/gambits.js', 'js/mascot.js', 'js/game.js', 'js/engine-worker.js', 'js/content/languages.js', 'js/content/gcse.js',
   'vendor/chess.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', (e) => {

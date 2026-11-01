@@ -28,7 +28,7 @@ function gradeOf(loss) {
 }
 
 let G = null; // active game
-let api = null; // callbacks into the app: { onFinish(result), onQuit(), spendGems(n) -> bool, sfx, gems() }
+let api = null; // callbacks into the app: { onFinish(result), onQuit(), spendSeeds(n) -> bool, sfx, seeds() }
 
 export function startGame(opts, callbacks) {
   api = callbacks;
@@ -95,7 +95,7 @@ function draw() {
   app.innerHTML = `<div class="game">
     <header class="l-top"><button class="x" data-g="quit" aria-label="Leave game">✕</button>
       <div class="g-title"><b>${esc(G.title)}</b><small>vs Hana · ${lv}</small></div>
-      <div class="g-gems">💎 ${api.gems()}</div></header>
+      <div class="g-gems">🌱 ${api.seeds()}</div></header>
     <div class="g-body">
       <div class="opp"><div class="opp-av">${mascot(G.thinking ? 'think' : 'happy', 44)}</div>
         <div><b>Hana</b><small>${G.thinking ? 'Thinking<span class="dots3"><i>.</i><i>.</i><i>.</i></span>' : `AI · ${lv}`}</small></div>
@@ -105,12 +105,23 @@ function draw() {
       <div class="coach">${mascot(G.coach.mood, 64)}<div class="bubble">${G.coach.text}</div></div>
     </div>
     <footer class="g-foot">
-      <button class="gbtn" data-g="hint" ${myTurn ? '' : 'disabled'}><span>💡</span>Hint<small>💎 10</small></button>
-      <button class="gbtn" data-g="undo" ${myTurn && G.c.history().length >= 2 ? '' : 'disabled'}><span>↩️</span>Take back<small>💎 10</small></button>
+      <button class="gbtn" data-g="hint" ${myTurn ? '' : 'disabled'}><span>💡</span>Hint<small>🌱 10</small></button>
+      <button class="gbtn" data-g="undo" ${myTurn && G.c.history().length >= 2 ? '' : 'disabled'}><span>↩️</span>Take back<small>🌱 10</small></button>
       <button class="gbtn" data-g="resign" ${G.over ? 'disabled' : ''}><span>🏳️</span>Resign<small>&nbsp;</small></button>
     </footer>
   </div>`;
   const mv = document.getElementById('moves'); if (mv) mv.scrollLeft = mv.scrollWidth;
+  if (G.anim) { slide(G.anim); G.anim = null; }
+}
+
+// Slide the piece that just moved from its old square (FLIP animation).
+function slide({ from, to }) {
+  const a = document.querySelector(`[data-sq="${from}"]`); const b = document.querySelector(`[data-sq="${to}"]`);
+  const pc = b?.querySelector('.pc');
+  if (!a || !pc || !pc.animate || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+  const ra = a.getBoundingClientRect(); const rb = b.getBoundingClientRect();
+  pc.animate([{ transform: `translate(${ra.left - rb.left}px, ${ra.top - rb.top}px) scale(1.12)` }, { transform: 'none' }],
+    { duration: 260, easing: 'cubic-bezier(.2,.8,.3,1)' });
 }
 
 function say(mood, text) { G.coach = { mood, text }; }
@@ -119,7 +130,7 @@ async function playerMove(from, to) {
   const before = G.c.fen();
   let mv;
   try { mv = G.c.move({ from, to, promotion: 'q' }); } catch { return; }
-  G.sel = null; G.targets = []; G.hint = null; G.last = mv;
+  G.sel = null; G.targets = []; G.hint = null; G.last = mv; G.anim = { from: mv.from, to: mv.to };
   api.sfx.tap();
   if (checkOver()) return;
   G.thinking = true;
@@ -129,6 +140,10 @@ async function playerMove(from, to) {
   if (!G) return;
   const g = gradeOf(grade.loss);
   G.grades[g.k]++;
+  if (grade.loss > 60 && (!G.worst || grade.loss > G.worst.loss)) {
+    const ply = G.prefix.length + G.c.history().length;
+    G.worst = { san: mv.san, best: grade.best, label: g.label, loss: grade.loss, move: `${Math.ceil(ply / 2)}${ply % 2 ? '.' : '...'}` };
+  }
   const better = grade.best && grade.best !== mv.san && g.k !== 'best' && g.k !== 'good' ? ` <b class="mono">${esc(grade.best)}</b> was stronger.` : '';
   say(g.mood, `<span class="grade g-${g.k}">${g.icon} ${g.label}</span> <span class="mono">${esc(mv.san)}</span>.${better}`);
   if (g.k === 'best') api.sfx.good(); else if (g.k === 'mistake' || g.k === 'blunder') api.sfx.bad();
@@ -142,6 +157,7 @@ async function aiMove(keepCoach = false) {
   const [res] = await Promise.all([ask({ type: 'best', fen: G.c.fen(), level: G.level }), wait(450)]);
   if (!G || !res.move) return;
   G.last = G.c.move({ from: res.move.from, to: res.move.to, promotion: res.move.promotion || 'q' });
+  G.anim = { from: G.last.from, to: G.last.to };
   G.thinking = false;
   if (checkOver()) return;
   if (G.c.inCheck()) say('think', `Check! I played <span class="mono">${esc(G.last.san)}</span>. Protect your king.`);
@@ -165,7 +181,7 @@ function endGame(result, how) {
   say(result === 'win' ? 'cheer' : result === 'draw' ? 'happy' : 'sad',
     result === 'win' ? 'You beat me! Amazing!' : result === 'draw' ? 'A draw. Well fought!' : 'I win this time. Let\'s try again!');
   draw();
-  const summary = { result, how, accuracy, grades: { ...G.grades }, level: G.level, lessonId: G.lessonId, moves: G.c.history().length, secs: Math.round((Date.now() - G.started) / 1000) };
+  const summary = { result, how, accuracy, grades: { ...G.grades }, level: G.level, lessonId: G.lessonId, title: G.title, worst: G.worst || null, moves: G.c.history().length, secs: Math.round((Date.now() - G.started) / 1000) };
   setTimeout(() => { const s = summary; G = null; api.onFinish(s); }, 1300);
 }
 
@@ -186,7 +202,7 @@ document.addEventListener('click', (e) => {
   if (a === 'quit') return api.onQuit(() => { G = null; });
   if (a === 'resign') return endGame('loss', 'by resignation');
   if (a === 'hint') {
-    if (!api.spendGems(10)) return;
+    if (!api.spendSeeds(10)) return;
     G.thinking = true; draw();
     ask({ type: 'best', fen: G.c.fen(), level: 3 }).then((r) => {
       if (!G) return;
@@ -195,7 +211,7 @@ document.addEventListener('click', (e) => {
     return;
   }
   if (a === 'undo') {
-    if (!api.spendGems(10)) return;
+    if (!api.spendSeeds(10)) return;
     G.c.undo(); G.c.undo(); G.last = null; G.sel = null; G.targets = []; G.hint = null;
     say('happy', 'Okay, take another look.'); return draw();
   }
