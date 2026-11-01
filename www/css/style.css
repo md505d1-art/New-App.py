@@ -736,3 +736,14 @@ body.bit-talking .mascot .bit-img, body.bit-talking .bit-solo img { animation: t
 @keyframes grad-move { 50% { background-position: 100% 100%; } }
 .medal-wrap .medal, .res-medal .medal { animation: medal-in .8s var(--spring) both, medal-float 4s 1s ease-in-out infinite; }
 @keyframes medal-float { 50% { transform: translateY(-5px) rotate(2deg); } }
+/* Call stage: Hana is sized by JS to the room available; nothing spills over the top bar or captions */
+.call { height: 100dvh; max-height: 100%; }
+.call-stage { overflow: hidden; justify-content: flex-end; padding-top: 14px; }
+.hana-wrap { position: relative; display: grid; place-items: center; flex-shrink: 0; }
+.hana-wrap .rings { position: absolute; inset: -12%; width: auto; height: auto; top: auto; left: auto; transform: none; }
+.hana-wrap .rings { top: -12%; left: -12%; right: -12%; bottom: -12%; }
+.call-hana .mascot { transition: width .25s var(--ease), height .25s var(--ease); }
+.call-hana .mascot .bit-img { top: 0; }
+.call-stage.tight .call-name { font-size: 18px; } .call-stage.tight .call-name small { font-size: 12px; }
+.call-stage.tight .call-sub { font-size: 13px; min-height: 0; }
+.captions { flex-shrink: 1; min-height: 0; }

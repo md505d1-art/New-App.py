@@ -26,8 +26,8 @@ function render() {
       <span class="call-mode">${ai ? '✨ Hana AI' : '📚 Offline tutor'}</span>
     </header>
     <div class="call-stage">
-      <div class="rings ${C.speaking ? `on ${C.speaking}` : ''}" id="rings"><i></i><i></i><i></i></div>
-      <div class="call-hana" id="call-hana">${mascot(C.mood, 210)}</div>
+      <div class="hana-wrap"><div class="rings ${C.speaking ? `on ${C.speaking}` : ''}" id="rings"><i></i><i></i><i></i></div>
+        <div class="call-hana" id="call-hana">${mascot(C.mood, 210)}</div></div>
       <h2 class="call-name">Hana <small>and Bit</small></h2>
       <p class="call-sub" id="call-sub">${connected ? (C.listening ? 'Listening…' : C.speaking ? (C.speaking === 'bit' ? 'Bit is talking' : 'Hana is talking') : 'Your turn') : 'Ringing…'}</p>
     </div>
@@ -41,6 +41,7 @@ function render() {
     </footer>
   </div>`;
   const cap = document.getElementById('captions'); if (cap) cap.scrollTop = cap.scrollHeight;
+  fit();
   if (C.typing) setTimeout(() => document.getElementById('call-input')?.focus({ preventScroll: true }), 50);
 }
 const waves = () => '<i class="wv"></i><i class="wv"></i><i class="wv"></i><i class="wv"></i>';
@@ -52,7 +53,21 @@ function addCaption(who, text, lang) {
   box.insertAdjacentHTML('beforeend', capHTML({ who, text, lang }));
   while (box.children.length > 6) box.firstElementChild.remove();
   box.scrollTop = box.scrollHeight;
+  fit();
 }
+
+// Size Hana to the space that's left, so she never overlaps the top bar or the captions
+// (short phones, landscape, or the keyboard being open).
+function fit() {
+  const stage = document.querySelector('.call-stage'); const m = document.querySelector('.call-hana .mascot');
+  if (!stage || !m) return;
+  const below = [...stage.children].filter((el) => !el.classList.contains('hana-wrap')).reduce((h, el) => h + el.offsetHeight + 6, 0);
+  const size = Math.round(Math.max(72, Math.min(210, stage.clientHeight - below - 24)));
+  m.style.setProperty('--s', `${size}px`);
+  stage.classList.toggle('tight', size < 120);
+}
+window.addEventListener('resize', () => C && fit());
+window.visualViewport?.addEventListener('resize', () => C && fit());
 function setStatus() {
   const sub = document.getElementById('call-sub'); if (sub) sub.textContent = C.listening ? 'Listening…' : C.speaking ? (C.speaking === 'bit' ? 'Bit is talking' : 'Hana is talking') : 'Your turn';
   const rings = document.getElementById('rings'); if (rings) rings.className = `rings ${C.speaking ? `on ${C.speaking}` : ''}`;
@@ -61,7 +76,7 @@ function setStatus() {
 }
 function setMood(m) {
   if (C.mood === m) return; C.mood = m;
-  const h = document.getElementById('call-hana'); if (h) { h.innerHTML = mascot(m, 210); h.classList.remove('swap'); void h.offsetWidth; h.classList.add('swap'); }
+  const h = document.getElementById('call-hana'); if (h) { h.innerHTML = mascot(m, 210); fit(); h.classList.remove('swap'); void h.offsetWidth; h.classList.add('swap'); }
 }
 
 /* ---------- ringing ---------- */

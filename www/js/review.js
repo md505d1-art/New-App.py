@@ -55,6 +55,7 @@ function summaryHTML() {
 function graphHTML() {
   const { rec } = R; const n = rec.evals.length; const W = 320; const H = 72;
   const pts = rec.evals.map((e, i) => [n > 1 ? (i / (n - 1)) * W : 0, H - (winPct(whiteScore(e.score, i, rec.startTurn)) / 100) * H]);
+  if (pts.length === 1) pts.push([W, pts[0][1]]); // a game with no moves: draw a flat line
   const area = `0,${H} ${pts.map((p) => p.join(',')).join(' ')} ${W},${H}`;
   const marks = rec.classes.map((cl, i) => (['blunder', 'mistake', 'inaccuracy'].includes(cl) ? `<circle cx="${pts[i + 1][0]}" cy="${pts[i + 1][1]}" r="3.2" fill="${CLASS[cl].color}" stroke="#fff" stroke-width="1"/>` : '')).join('');
   const x = n > 1 ? (R.ply / (n - 1)) * W : 0;

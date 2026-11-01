@@ -1,6 +1,6 @@
 // Offline support: everything the app needs is cached on install, so lessons, chess and
 // Hana all work with no connection. Cache-first, refreshed in the background when online.
-const CACHE = 'sprout-v6';
+const CACHE = 'sprout-v7';
 const SHELL = [
  "./",
  "css/fonts.css",
