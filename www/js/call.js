@@ -9,6 +9,8 @@ let C = null;
 
 export function startCall(callbacks) {
   C = { cb: callbacks, started: 0, timer: null, listening: false, speaking: null, typing: !canListen(), captions: [], mood: 'happy', ended: false, muted: !S.voice };
+  // Messages typed while it's still ringing wait here until Hana picks up and has said hello.
+  C.queue = new Promise((r) => { C.pickUp = r; });
   render(); ring();
 }
 export const callActive = () => !!C;
@@ -103,9 +105,10 @@ async function connect() {
   C.timer = setInterval(() => { const el = document.getElementById('call-time'); if (el && C) el.textContent = fmt(Math.round((Date.now() - C.started) / 1000)); }, 1000);
   render();
   C.tutor = createTutor({ say: speakLine, action: onAction });
-  C.queue = C.tutor.greet();
-  await C.queue;
-  autoListen();
+  const call = C;
+  call.pickUp(call.tutor.greet());
+  await call.queue;
+  if (C === call) autoListen();
 }
 
 // Hana or Bit speaks a line (with captions, mood and speaking rings).
@@ -133,7 +136,7 @@ function heard(text) {
   if (!C || !text?.trim()) return;
   addCaption('you', text.trim());
   const call = C;
-  call.queue = (call.queue || Promise.resolve()).then(async () => { if (C === call && !call.ended) await call.tutor.hear(text.trim()); });
+  call.queue = call.queue.then(async () => { if (C === call && !call.ended) await call.tutor?.hear(text.trim()); }).catch(() => {});
   return call.queue.then(() => { if (C === call) autoListen(); });
 }
 

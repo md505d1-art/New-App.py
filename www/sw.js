@@ -1,6 +1,6 @@
 // Offline support: everything the app needs is cached on install, so lessons, chess and
-// Hana all work with no connection. Cache-first, refreshed in the background when online.
-const CACHE = 'sprout-v7';
+// Hana all work with no connection.
+const CACHE = 'sprout-v8';
 const SHELL = [
  "./",
  "css/fonts.css",
@@ -64,14 +64,20 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
 });
+// Network first (so updates show up straight away), falling back to the cache when
+// offline or when the connection is too slow to answer within a few seconds.
 self.addEventListener('fetch', (e) => {
-  if (e.request.method !== 'GET') return;
-  e.respondWith(caches.open(CACHE).then(async (cache) => {
-    const hit = await cache.match(e.request, { ignoreSearch: true });
-    const net = fetch(e.request).then((res) => {
-      if (res.ok || res.type === 'opaque') cache.put(e.request, res.clone());
+  const req = e.request;
+  if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
+  e.respondWith((async () => {
+    const cache = await caches.open(CACHE);
+    try {
+      const res = await Promise.race([fetch(req), new Promise((_, no) => setTimeout(() => no(new Error('slow')), 4000))]);
+      if (res.ok) cache.put(req, res.clone());
       return res;
-    }).catch(() => hit || (e.request.mode === 'navigate' ? cache.match('index.html') : undefined));
-    return hit || net;
-  }));
+    } catch {
+      const hit = await cache.match(req, { ignoreSearch: true });
+      return hit || (req.mode === 'navigate' ? cache.match('index.html') : Response.error());
+    }
+  })());
 });
