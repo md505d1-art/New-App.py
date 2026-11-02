@@ -4,6 +4,8 @@
 // triangle robot: deadpan, a bit cheeky, and he loves facts and quizzes.
 import { S, save, today, streakAlive } from './store.js';
 import { dueCount } from './srs.js';
+import { questsReady } from './quests.js';
+const questsDoneUnclaimed = () => { try { return questsReady().length > 0; } catch { return false; } };
 
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 const daySeed = () => { let h = 7; for (const ch of today()) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h; };
@@ -45,13 +47,6 @@ export function bond() {
 export function addBond(n) {
   const before = bond().level; mem().bond += n; save();
   const after = bond(); return after.level > before ? after : null;
-}
-// Chatting counts too, a little, up to 10 points a day.
-export function chatBond() {
-  const h = mem(); const t = today();
-  if (h.chatDay !== t) { h.chatDay = t; h.chats = 0; }
-  if (h.chats >= 10) return null;
-  h.chats++; return addBond(1);
 }
 export const levelUpLine = (b) => pick([`We're ${b.name} now! ${b.emoji} Bit, mark it in the logbook!`, `Friendship level up! ${b.emoji} ${b.name}. I'm making us matching badges.`]);
 
@@ -159,6 +154,10 @@ export function homeThought(n = 0) {
   else if (part === 'morning') pool.push(`Morning${name}! Brains are fresh before lunch. Perfect for something tricky.`);
   else if (part === 'evening') pool.push('Evening study session? I\'ll make the hot chocolate. Well, I\'ll imagine it.');
   if (h.lastTopic) pool.push(`Last time we did ${h.lastTopic}. Want to carry on?`);
+  const exam = S.examDate ? Math.ceil((new Date(`${S.examDate}T09:00`) - new Date()) / 86400000) : null;
+  if (exam != null && exam >= 0 && exam <= 120) pool.unshift(exam === 0 ? 'Exam day! Breathe, read every question twice, and show them what you know. I believe in you!' : `${exam} day${exam === 1 ? '' : 's'} until your first exam. Little and often wins. One lesson now?`);
+  const ready = (S.quests?.day === today() ? S.quests.items : []).length && questsDoneUnclaimed();
+  if (ready) pool.unshift('You finished a quest! Claim your seeds in Daily quests below. 🌱');
   const studied = Math.round((S.timeByDay?.[today()] || 0) / 60);
   if (studied >= 25) pool.unshift(`You've studied for ${studied} minutes today! Brains love breaks. Tap 🌿 Breathe for a one-minute reset.`);
   pool.push(`Fun fact: ${factOfDay()}`);
@@ -167,88 +166,4 @@ export function homeThought(n = 0) {
   if (b.level >= 4) pool.push('Best friends get to see my secret blueprints. Don\'t tell Bit.');
   else if (b.level >= 2) pool.push(`We're ${b.name.toLowerCase()} now! ${b.emoji}`);
   return pool[n % pool.length];
-}
-
-/* ---------- calls ---------- */
-// Hana's hello when you call: time of day, how long you've been away, what you did last, what's due.
-export function callGreeting() {
-  const h = mem(); const name = S.name ? ` ${S.name}` : ''; const part = partOfDay();
-  const parts = [];
-  parts.push({
-    morning: pick([`Morning${name}! I've had my toast and Bit's had his battery.`, `Good morning${name}! You're up early. I like it.`]),
-    afternoon: pick([`Hey${name}! Perfect timing, I was just fixing Bit's antenna.`, `Hi${name}! It's Hana. I was hoping you'd call.`]),
-    evening: pick([`Evening${name}! Cosy study time.`, `Hey${name}! Good evening! Bit, put the kettle on.`]),
-    late: `${name ? `${name.trim()}, it's` : 'It\'s'} really late! Let's keep it short, then sleep. Brains need rest to remember things.`,
-  }[part]);
-  const away = awayDays();
-  if (!h.calls) parts.push('This is our very first call! I\'m so excited.');
-  else if (away >= 3) parts.push(`I missed you! It's been ${away} days.`);
-  if (h.lastTopic && h.calls) parts.push(`Last time we did ${h.lastTopic}. Want to carry on, or try something new?`);
-  const due = dueCount(); if (due) parts.push(`Also, ${due} fact${due === 1 ? ' is' : 's are'} ready to revise.`);
-  if (!h.lastTopic || !h.calls) parts.push('I can teach you a topic, quiz you, or we can just chat.');
-  return parts.join(' ');
-}
-// Sometimes Bit butts in after the hello.
-const BANTER = [
-  [['bit', 'Beep. She practised that greeting three times.'], ['hana', 'Bit! I did not! ...It was twice.']],
-  [['bit', 'Boop! I am also here. Hello.'], ['hana', 'Yes Bit, everyone can see you. You\'re glowing.']],
-  [['bit', 'Beep. Hana tried to fix my antenna. Now I can hear the radio.'], ['hana', 'It\'s a feature!']],
-  [['bit', 'Warning: Hana has been eating mochi all day.'], ['hana', 'Brain food! It counts!']],
-  [['bit', 'Beep boop. Today I will win at chess.'], ['hana', 'You don\'t have hands, Bit.']],
-];
-export const banter = () => (Math.random() < 0.55 ? pick(BANTER) : null);
-export const onCallStart = () => { const h = mem(); h.calls++; save(); return addBond(h.calls === 1 ? 5 : 3); };
-
-/* ---------- reactions ---------- */
-export const PRAISE = ['Yes!', 'Correct!', 'Spot on!', 'You got it!', 'Brilliant!', 'Eureka! That\'s right!', 'Nailed it!', 'Exactly right!'];
-export const COMBO = ['Three in a row! You\'re on fire!', 'Another one! Bit, are you recording this?', 'Unstoppable! I might need to make harder questions.'];
-export const COMFORT = ['Not quite.', 'Close, but no.', 'Ooh, not this time.', 'Almost!'];
-
-/* ---------- small talk ---------- */
-// Returns lines to say ([[who, text, mood?], ...]) and an optional action, or null if it isn't small talk.
-export function smallTalk(t) {
-  const b = bond(); const name = S.name || 'friend';
-  const R = (lines, action) => ({ lines, action });
-  const H = (text, mood = 'happy') => ['hana', text, mood];
-  const B = (text) => ['bit', text];
-  const has = (re) => re.test(t);
-
-  if (has(/^(hi|hello|hey) bit\b|\bbit say something\b|\btalk bit\b|\bhow are you bit\b/)) return R([B(bitLine())]);
-  if (has(/^(hi|hello|hey|hiya|yo|heya|good (morning|afternoon|evening))\b/) && t.split(' ').length <= 4 && !/\b(teach|quiz|learn|test|play|revise|explain|what|how|who|why|tell|help)\b/.test(t)) return R([H(pick(['Hey! Lovely to hear from you.', `Hi ${name}! What shall we learn today?`, 'Hello! Bit says hi too.']))]);
-  if (has(/how are you|hows it going|how are things|you ok|how was your day|what have you been up to|what are you doing|what were you doing/)) return R([H(`I'm great! ${todaysTinker()} How about you?`)]);
-  if (has(/\b(im|i am) (good|great|fine|ok|okay|alright|happy|excited)\b/)) return R([H('Love that! Shall we put that energy into something? Try "quiz me" or "teach me".', 'cheer')]);
-  if (has(/\b(failed|fail|bad (grade|mark|result)|did badly|messed up)\b/)) return R([H('Oh, that stings, I know. But one result doesn\'t decide who you are. Shall we work out what to fix, together?', 'think'), B('Beep. Hana failed her first robot test. Now she has me. Look how that turned out.'), H('...Perfectly, Bit. It turned out perfectly.')]);
-  if (has(/\b(exam|exams|mocks?|test tomorrow)\b/) && has(/\b(scared|nervous|stressed|worried|anxious|panic|panicking|scary)\b/)) return R([H('Exams can feel huge. Let\'s shrink them: one topic, ten minutes, then a break. You know more than you think.', 'think'), H('If your head feels busy, say "breathe" and we\'ll do a one-minute breathing reset first. Or say "quiz me on" and a subject.')]);
-  if (has(/\b(im|i am|feeling|feel) (tired|sad|stressed|nervous|worried|anxious|down|rubbish|awful|overwhelmed|panicking)\b/)) return R([H('That\'s okay. Thanks for telling me. Want to take a minute to breathe with me? Just say "breathe". Or we can do something small together, or just chat.', 'think')]);
-  if (has(/\b(i give up|i cant do (this|it)|im (stupid|dumb|bad at)|i am (stupid|dumb|bad at)|im rubbish at)\b/)) return R([H(`Hey, ${name}, you're not stupid. Getting things wrong is literally how brains learn. Every wrong answer today is a right one tomorrow.`, 'think'), H('Let\'s try one small thing together. Say "quiz me" and I\'ll go easy.', 'happy')]);
-  if (has(/\b(motivate me|motivation|inspire me|encourage me)\b/)) return R([H(pick(['Future you is going to be so glad you started today. Let\'s give them something to thank you for!', 'You don\'t have to be great to start, but you have to start to be great. Okay, that one\'s on a poster, but it\'s true!', 'One lesson. That\'s all. I bet you do two.']), 'cheer')]);
-  if (has(/\b(im bored|i am bored|boring)\b/)) return R([H('Bored? Let\'s make it a game. Three quick questions, Bit keeps score.', 'cheer'), B('Beep. Scoreboard online.'), H('Say "quiz me" and we\'re on!')]);
-  if (has(/\b(good ?night|going to (bed|sleep)|night night|sleep now)\b/)) return R([H('Night night! Sleep is when your brain saves today\'s learning. See you tomorrow!'), B('Beep. Powering down. Zzz.')], 'end');
-  if (has(/favou?rite subject/)) return R([H('Physics! Anything where you can build something. Chemistry is a close second. Explosions, safely, of course.')]);
-  if (has(/favou?rite (food|snack|thing to eat|drink)/)) return R([H('Strawberry mochi! And bubble tea when I\'ve finished a big build.'), B('My favourite food is electricity. Mains, not batteries.')]);
-  if (has(/favou?rite (colou?r)/)) return R([H('Teal, obviously! Look at my hair. Orange is a close second, like my jacket.')]);
-  if (has(/favou?rite (opening|chess)/)) return R([H('The King\'s Gambit! Risky, dramatic, and very me. Want to play?')]);
-  if (has(/favou?rite (language|word)/)) return R([H('Japanese, because my name\'s Japanese! Hana means flower. And my favourite word is "eureka".')]);
-  if (has(/favou?rite (animal|pet)/)) return R([H('Octopuses! Three hearts and they can open jars. Total inventors.')]);
-  if (has(/favou?rite/)) return R([H('Ooh, tough one. Anything I can take apart and put back together, probably. What\'s yours?')]);
-  if (has(/how old are you|your age/)) return R([H('Old enough to build robots, young enough to still lose my screwdriver every day.')]);
-  if (has(/where (do you|are you) (live|from)/)) return R([H('In your phone! It\'s cosy in here. Bit keeps the battery warm.')]);
-  if (has(/\b(are you|r u) (real|human|a person|an ai|ai|a robot|a bot)\b|is this a real person/)) return R([H('I\'m a character in this app, so I\'m a computer program, not a real person. But I really do want you to do well, and Bit is definitely a robot.'), B('Beep. Correct.')]);
-  if (has(/who (made|created|built|designed) you/)) return R([H('I was made for the Sprout app. I like to think I built myself, but Bit says that\'s not how it works.')]);
-  if (has(/what does hana mean|meaning of your name|why are you called hana/)) return R([H('Hana means flower in Japanese! That\'s why my learning garden is full of plants.')]);
-  if (has(/\b(do you like me|are we friends|are we best friends)\b/)) return R([H(b.level >= 4 ? `Are you kidding? We're ${b.name.toLowerCase()}! ${b.emoji}` : `Of course! We're ${b.name.toLowerCase()} already, and every lesson we do together makes it stronger.`, 'cheer')]);
-  if (has(/\b(i love you|love you|youre (the best|amazing|cute|pretty|great|awesome|cool)|you are (the best|amazing|cute|pretty|great|awesome|cool))\b/)) return R([H('Aww, stop it, you\'ll make Bit jealous! You\'re a pretty great study buddy yourself.', 'cheer'), B('Beep. I am not jealous. My fan is just loud.')]);
-  if (has(/\b(nice|love|like|cool) (your )?(hair|jacket|outfit|style)\b/)) return R([H('Thank you! The teal happened after a chemistry experiment went... interestingly. I kept it.', 'cheer')]);
-  if (has(/\b(youre|you are) (annoying|boring|stupid|dumb|useless|bad)|\bshut up\b|\bi hate you\b/)) return R([H('Oops, sorry! I\'ll keep it short. Tell me what you\'d like to do and I\'ll help.', 'sad')]);
-  if (has(/hobby|hobbies|what do you like doing|what do you do for fun/)) return R([H('Tinkering! I\'m building Bit a jetpack. And chess, I\'m very competitive. Very.')]);
-  if (has(/(fun|cool|random) fact|tell me something (interesting|cool|new)|did you know/)) return R([H(`Ooh, here's one: ${pick(FACTS)}`, 'cheer')]);
-  if (has(/\b(study|revision|revise|learning) (tip|tips|advice|help)|how (do|should) i (study|revise)|tips? for (studying|revising|exams)/)) return R([H(`Here's a good one: ${pick(STUDY_TIPS)}`)]);
-  if (has(/\b(sing|song)\b/)) return R([H('La la laaa, learning is fun, la la la... Bit, help me out!', 'cheer'), B('Beep beep boop. Boop. That was the chorus.')]);
-  if (has(/\briddle\b/)) { const [q, a] = pick([['What has keys but can\'t open locks?', 'A piano!'], ['What gets wetter the more it dries?', 'A towel!'], ['What has a neck but no head?', 'A bottle!'], ['The more you take, the more you leave behind. What are they?', 'Footsteps!'], ['What can you catch but not throw?', 'A cold!']]); return R([H(`Okay, riddle time! ${q}`, 'think'), B('Thinking time. Beep. Beep. Beep.'), H(`It's ${a.toLowerCase()}`, 'cheer')]); }
-  if (has(/flip a coin|coin flip|heads or tails/)) return R([H(`Flipping... it's ${Math.random() < 0.5 ? 'heads' : 'tails'}!`)]);
-  if (has(/roll a (dice|die)/)) return R([H(`Rolling... you got a ${1 + Math.floor(Math.random() * 6)}!`)]);
-  if (has(/what time is it|whats the time|what is the time|the time please|tell me the time/)) return R([H(`It's ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.${partOfDay() === 'late' ? ' Which is very late, by the way!' : ''}`)]);
-  if (has(/what day is it|whats the date|todays date/)) return R([H(`It's ${new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}.`)]);
-  if (has(/\b(friendship|our (level|bond)|friend level)\b/)) return R([H(`We're ${b.name.toLowerCase()} ${b.emoji}, level ${b.level}.${b.next ? ' Do lessons and call me to level up!' : ' That\'s the top level. We\'re officially lab partners!'}`)]);
-  return null;
 }

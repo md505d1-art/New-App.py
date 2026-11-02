@@ -1,10 +1,11 @@
 import { COURSES, CATEGORIES, gambitStart, GAMBITS, GCSE_MFL } from './courses.js';
 import { avatarSVG, AV_OPTIONS, AV_LABELS, DEFAULT_AVATAR, randomAvatar } from './avatar.js';
 import { hanaSay, bitSay } from './voice.js';
-import { learnLesson, recordAnswer, dueCount, buildReview, memoryScore } from './srs.js';
+import { learnLesson, recordAnswer, dueCount, buildReview, memoryScore, learnCard, forgetCard, buildCards } from './srs.js';
 import { showReview } from './review.js';
-import { startCall, callActive } from './call.js';
-import { englishVoices, hanaVoice, voicesReady, canListen } from './speech.js';
+import { englishVoices, hanaVoice, voicesReady } from './speech.js';
+import { todaysQuests, questEvent, claimQuest, questsReady } from './quests.js';
+import { startFocus, focusActive } from './focus.js';
 import { onSpeaking, HANA_PITCH } from './voice.js';
 import { mascot, bitIcon, POSE } from './mascot.js';
 import { homeThought, poke, bitLine, bond, checkIn, levelUpLine, addBond, remember } from './persona.js';
@@ -56,7 +57,7 @@ function render() {
   const anim = key === lastKey ? '' : openCourse ? 'push-in' : lastKey.startsWith('course:') ? 'pop-in-screen' : ti > lastTab ? 'slide-l' : ti < lastTab ? 'slide-r' : 'screen-in';
   lastTab = ti;
   const screens = { home: homeScreen, explore: exploreScreen, progress: progressScreen, profile: profileScreen };
-  const body = openCourse ? courseScreen(COURSES[openCourse]) : (screens[S.tab] || homeScreen)();
+  const body = openCourse === 'mycards' ? cardsScreen() : openCourse ? courseScreen(COURSES[openCourse]) : (screens[S.tab] || homeScreen)();
   $app.innerHTML = `<div class="shell">
     <main class="main ${anim} ${openCourse ? 'no-nav' : ''}" id="main">${body}</main>
     ${openCourse ? '' : `<nav class="tabbar" aria-label="Main" style="--x:${ti}"><span class="tab-pill"></span>${TABS.map(([id, label, d]) => `<button class="tab ${S.tab === id ? 'on' : ''}" data-tab="${id}">
@@ -89,13 +90,39 @@ function renderOnboarding() {
 function greeting() { const h = new Date().getHours(); return h < 12 ? 'Good morning,' : h < 18 ? 'Good afternoon,' : 'Good evening,'; }
 function weekDays() { const d = new Date(); const back = (d.getDay() + 6) % 7; return [...Array(7)].map((_, k) => dayOffset(k - back)); }
 
+/* ---- theme (Auto follows the phone) ---- */
+function applyTheme() {
+  const t = S.theme || 'auto';
+  if (t === 'auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
+  const dark = t === 'dark' || (t === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#14121f' : '#5b3fd6');
+}
+/* ---- exam countdown ---- */
+function examDays() {
+  if (!S.examDate) return null;
+  const d = Math.ceil((new Date(`${S.examDate}T09:00`) - new Date()) / 86400000);
+  return d >= 0 ? d : null;
+}
+/* ---- daily quests ---- */
+function quest(ev, n = 1) {
+  const done = questEvent(ev, n);
+  done.forEach((q, i) => setTimeout(() => { toast(`${q.icon} Quest complete: ${q.text}! Claim 🌱 ${q.reward} on Home`); sfx.pop(); }, 700 + i * 1200));
+}
+function questsCard() {
+  const qs = todaysQuests(); const allClaimed = qs.every((q) => q.claimed);
+  return `<div class="sec-row rise" style="--i:2"><h2>Daily quests</h2><span class="muted small">${allClaimed ? 'All done today! ✨' : `Finish all 3 for a bonus 🌱`}</span></div>
+    <section class="list-card quests rise" style="--i:2">${qs.map((q) => `<div class="row quest ${q.claimed ? 'claimed' : q.done ? 'ready' : ''}">
+      <span class="row-ic">${q.icon}</span><span class="row-txt"><b>${esc(q.text)}</b><span class="bar thin"><i style="width:${Math.round((q.prog / q.goal) * 100)}%"></i></span><small>${q.prog} / ${q.goal}</small></span>
+      ${q.claimed ? '<span class="q-done">✓</span>' : q.done ? `<button class="claim-btn" data-claim="${q.id}">Claim 🌱 ${q.reward}</button>` : `<span class="q-reward">🌱 ${q.reward}</span>`}</div>`).join('')}</section>`;
+}
+
 let thought = 0;
 const hanaLine = () => homeThought(thought);
 function bondChip() {
   const b = bond();
   return `<div class="bond-chip" title="Friendship with Hana"><span>${b.emoji} ${b.name}</span><small>Lv ${b.level}</small><span class="bar thin"><i style="width:${Math.round(b.pct * 100)}%"></i></span></div>`;
 }
-// Celebrate a friendship level-up (from lessons, calls, chatting or daily visits).
+// Celebrate a friendship level-up (from lessons, chess, focus sessions, breathers or daily visits).
 function celebrateBond(up) { if (!up) return; const line = levelUpLine(up); setTimeout(() => { toast(`💜 ${line}`); hanaSay(line); }, 900); }
 // Type Hana's words into her speech bubble, letter by letter.
 let typer = null;
@@ -123,9 +150,8 @@ function homeScreen() {
     <div class="aurora" aria-hidden="true"><i></i><i></i><i></i><span class="sparks">${'<b></b>'.repeat(10)}</span></div>
     <header class="home-head">
       <div><p class="hello">${greeting()}${S.name ? ` ${esc(S.name)}` : ''}</p><h1 class="headline">${streak ? 'Keep going!' : 'Let\'s begin!'} ${sun(36)}</h1>
-        <p class="lead">A little progress each day leads to big results.</p></div>
-      <div class="head-btns"><button class="call-btn" data-act="call" aria-label="Call Hana"><span class="pulse"></span>📞</button>
-        <button class="avatar-btn" data-tab="profile" aria-label="Your profile">${myAvatar(60)}</button></div>
+        <p class="lead">${examDays() != null ? `<span class="exam-chip">🎓 ${examDays() === 0 ? 'Exams start today. You\'ve got this!' : `${examDays()} day${examDays() === 1 ? '' : 's'} until your first exam`}</span>` : 'A little progress each day leads to big results.'}</p></div>
+      <div class="head-btns"><button class="avatar-btn" data-tab="profile" aria-label="Your profile">${myAvatar(60)}</button></div>
     </header>
 
     <section class="streak-card rise" style="--i:1">
@@ -137,13 +163,16 @@ function homeScreen() {
 
     <section class="hana-card rise" style="--i:1">${mascot('happy', 104)}<div class="hc-bubble"><div class="hc-top"><b>Hana</b>${bondChip()}</div><p id="hc-text" aria-live="polite">${esc(hanaLine())}</p>
       <button class="hc-more" data-act="next-thought" aria-label="What else is Hana thinking?">💭 What else?</button>
-      <button class="hc-call" data-act="call"><span>📞</span> Call me. I'll teach you anything</button></div></section>
-    <div class="quick rise" style="--i:1">
-      <button data-act="call"><span>📞</span>Call Hana</button>
+      <button class="hc-call" data-act="focus"><span>⏱️</span> Study with me</button></div></section>
+    <div class="quick five rise" style="--i:1">
+      <button data-act="focus"><span>⏱️</span>Focus</button>
       <button data-act="revise"><span>🧠</span>Revise</button>
+      <button data-open="mycards"><span>🃏</span>Cards</button>
       <button data-open="chess"><span>♞</span>Chess</button>
       <button data-act="breathe"><span>🌿</span>Breathe</button>
     </div>
+
+    ${questsCard()}
 
     ${reviewCard()}
 
@@ -304,7 +333,7 @@ function profileScreen() {
         <button class="edit-av" data-act="avatar">✏️ Edit your character</button></div></section>
     ${(() => { const b = bond(); return `<div class="sec-row rise" style="--i:1"><h2>You and Hana</h2></div>
     <section class="list-card bond-card rise" style="--i:1">${mascot('happy', 64, { bit: false })}<div class="bc-txt"><b>${b.emoji} ${b.name}</b><small>Friendship level ${b.level} · ${b.next ? `${b.next.at - b.points} points to ${b.next.name}` : 'Top level!'}</small>
-      <span class="bar"><i style="width:${Math.round(b.pct * 100)}%"></i></span><small>Grows every day you visit, and with lessons, calls, chess and chatting.</small></div></section>`; })()}
+      <span class="bar"><i style="width:${Math.round(b.pct * 100)}%"></i></span><small>Grows every day you visit, and with lessons, chess, focus sessions and breathers.</small></div></section>`; })()}
     <div class="sec-row rise" style="--i:1"><h2>Badges</h2></div>
     <div class="badges rise" style="--i:1">${badges.map(([e, n, d, ok]) => `<div class="bdg ${ok ? 'got' : ''}"><span>${e}</span><b>${n}</b><small>${d}</small></div>`).join('')}</div>
     <div class="sec-row rise" style="--i:2"><h2>Bookshelf</h2><button class="see-all" data-act="addbook">+ Add book</button></div>
@@ -323,11 +352,8 @@ function profileScreen() {
         <select id="set-hvoice" aria-label="Hana's voice"><option value="">Automatic (most like Kimberly)</option>${englishVoices().map((v) => `<option value="${esc(v.name)}" ${S.hanaVoice === v.name ? 'selected' : ''}>${esc(v.name)} · ${esc(v.lang)}</option>`).join('')}</select>
         <div class="seg-tabs small">${Object.keys(HANA_PITCH).map((p) => `<button class="${S.hanaPitch === p ? 'on' : ''}" data-pitch="${p}">${p[0].toUpperCase() + p.slice(1)}</button>`).join('')}<button data-act="preview-voice">▶ Preview</button></div>
         <small class="muted">Now using: ${esc(hanaVoice(S.hanaVoice)?.name || 'your phone\'s default voice')}</small></div>
-      <button class="set-row" data-act="handsfree"><span>Hands-free calls</span><b>${S.handsFree ? 'On' : 'Off'}</b></button>
-      <div class="set-row col"><span>Hana AI (online, optional)</span>
-        <small class="muted">Add your own Anthropic API key and Hana can chat about anything using Claude when you're online. The key stays on this device and is only sent to Anthropic. Anthropic charges you for usage. Without a key, calls use the offline tutor.</small>
-        <input id="set-aikey" type="password" autocomplete="off" placeholder="sk-ant-…" value="${esc(S.aiKey)}" aria-label="Anthropic API key">
-        <div class="seg-tabs small"><button class="${S.aiOn ? 'on' : ''}" data-act="ai-toggle">${S.aiOn ? 'On' : 'Off'}</button><button data-act="ai-test">Test key</button></div></div>
+      <div class="set-row"><span>Theme</span><div class="seg-tabs small">${[['auto', 'Auto'], ['light', 'Light'], ['dark', 'Dark']].map(([k, n]) => `<button class="${(S.theme || 'auto') === k ? 'on' : ''}" data-theme-set="${k}">${n}</button>`).join('')}</div></div>
+      <label class="set-row" for="set-exam"><span>First GCSE exam<small class="muted block">Shows a countdown on Home</small></span><input id="set-exam" type="date" value="${esc(S.examDate || '')}"></label>
       <div class="set-row"><span>Offline learning</span><b class="${navigator.onLine ? '' : 'off'}" id="offline-state">${offlineText()}</b></div>
       ${installPrompt ? '<button class="set-row" data-act="install"><span>Install Sprout</span><b>Add to home screen</b></button>' : ''}
       ${window.Capacitor?.isNativePlatform?.() ? '' : '<a class="set-row" href="get.html" target="_blank" rel="noopener"><span>Put Sprout on your phone</span><b>📱 QR code</b></a>'}
@@ -401,6 +427,7 @@ const breatherBtn = (label) => `<button class="primary-btn ghost-btn calm-btn" d
 function lessonDone(c, l, r) {
   const first = !S.done[l.id];
   S.done[l.id] = Math.max(starsOf(l.id), r.stars);
+  quest('lesson'); if (r.stars === 3) quest('perfect');
   learnLesson(c, l); remember(`${l.title.length > 38 && l.unit ? l.unit.title : l.title} in ${c.name}`);
   hanaSay(r.stars === 3 ? pick(['Perfect lesson! Eureka!', 'Perfect! I\'m framing this one.', 'Three stars! Bit, fireworks please!']) : r.stars === 2 ? pick(['Lesson complete! Great work.', 'Nicely done! Nearly perfect.']) : pick(['Lesson complete! The tricky ones will come back in Smart revise.', 'Done! Every mistake today is a right answer tomorrow.']));
   celebrateBond(addBond(3));
@@ -446,7 +473,7 @@ function gameDone(r) {
   S.games.unshift({ date: new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'short' }), title: r.title, result: r.result, accuracy: r.accuracy, level: r.level, worst: r.worst });
   S.games = S.games.slice(0, 20);
   S.seeds += seeds; addXP(xp); addTime(r.secs);
-  lastGame = r; celebrateBond(addBond(2));
+  lastGame = r; celebrateBond(addBond(2)); quest('chess');
   if (pass) sfx.win(); else sfx.bad();
   const nx = r.lessonId ? nextAfter(COURSES.chess, r.lessonId) : null;
   results({ title: r.result === 'win' ? 'You won!' : r.result === 'draw' ? 'It\'s a draw!' : 'Hana won this one', sub: `${esc(r.how)} · ${plural(r.moves, 'move')}`, good: pass, color: pass ? 'green' : 'red',
@@ -475,15 +502,51 @@ function renderAvatarBuilder() {
   </div>`;
 }
 
-/* ================= Call Hana ================= */
-function openCall() {
-  startCall({
-    onEnd: (secs) => { if (secs) addTime(secs); toast(`Call ended · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`); render(); },
-    onLessonDone: ({ c, l, stars }) => { const first = !S.done[l.id]; S.done[l.id] = Math.max(starsOf(l.id), stars); learnLesson(c, l); S.seeds += first ? 5 : 1; addXP(10 + stars * 2); addBond(3); },
-    chess: () => { S.tab = 'explore'; openCourse = 'chess'; render(); },
-    revise: () => startRevise(),
-    breathe: () => startBreathe({ onDone: () => render() }),
+/* ================= Focus timer ================= */
+function openFocus() {
+  startFocus({
+    onSession: (secs, complete) => {
+      for (let left = secs; left > 0; left -= 1800) addTime(Math.min(1800, left)); // counts as learning time
+      quest('focusmin', Math.round(secs / 60));
+      if (complete) { addXP(10); S.seeds += 5; save(); quest('focus'); celebrateBond(addBond(2)); }
+    },
+    onQuit: () => render(),
   });
+}
+
+/* ================= My flashcards ================= */
+function cardsScreen() {
+  const cards = S.cards || [];
+  const tags = [...new Set([...cards.map((c) => c.tag).filter(Boolean), ...started().map((c) => c.name)])];
+  const box = (cd) => S.mem?.[`own:${cd.id}`]?.box || 1;
+  return `<div class="course mycards" style="${cv('yellow')}">
+    <header class="bar-head"><button class="nav-ic" data-act="back" aria-label="Back"><svg viewBox="0 0 24 24" width="24" height="24"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><b>My flashcards</b><span class="nav-ic ghost"></span></header>
+    <section class="course-hero rise"><div class="ch-art">${thumb('yellow')}<span class="cc-flag big">🃏</span></div>
+      <div class="ch-text"><h1>My flashcards</h1><p>Make your own cards from your notes. They join Smart revise, so they come back just before you'd forget them.</p></div></section>
+    <form class="list-card card-form rise" id="card-form" style="--i:1" autocomplete="off">
+      <label for="cf-front">Front <small class="muted">question, word or term</small></label><input id="cf-front" maxlength="140" required placeholder="e.g. What is osmosis?">
+      <label for="cf-back">Back <small class="muted">the answer</small></label><input id="cf-back" maxlength="200" required placeholder="e.g. Water moving across a partially permeable membrane">
+      <label for="cf-tag">Subject <small class="muted">optional</small></label><input id="cf-tag" maxlength="30" list="cf-tags" placeholder="e.g. Biology"><datalist id="cf-tags">${tags.map((t) => `<option value="${esc(t)}">`).join('')}</datalist>
+      <button class="primary-btn" type="submit">+ Add card</button>
+    </form>
+    ${cards.length ? `<button class="primary-btn study-cards rise" style="--i:2" data-act="study-cards">Study my cards (${cards.length}) ${arrow}</button>` : ''}
+    <div class="sec-row rise" style="--i:2"><h2>Your cards</h2><span class="muted small">${plural(cards.length, 'card')}</span></div>
+    <section class="list-card rise" style="--i:3">${cards.length ? cards.map((cd) => `<div class="row fcard"><span class="row-txt"><b>${esc(cd.front)}</b><small>${esc(cd.back)}</small>
+        <span class="fc-meta">${cd.tag ? `<i class="fc-tag">${esc(cd.tag)}</i>` : ''}<i class="fc-mem" title="Memory strength">${'●'.repeat(Math.min(5, box(cd)))}${'○'.repeat(Math.max(0, 5 - box(cd)))}</i></span></span>
+        <button class="x-btn" data-delcard="${cd.id}" aria-label="Delete card">✕</button></div>`).join('')
+      : '<p class="muted pad">No cards yet. Add your first one above. Short answers work best.</p>'}</section>
+  </div>`;
+}
+function studyCards() {
+  const r = buildCards(15); if (!r) return toast('Add a card first');
+  startLesson(r.course, r.lesson, { onDone: (res) => cardsDone(res, r), onQuit: quitter, onAnswer: (q, ok) => recordAnswer(q.fact, ok) });
+}
+function cardsDone(res, r) {
+  const xp = 5 + res.stars * 2; addXP(xp); addTime(res.secs); sfx.win(); quest('cards'); celebrateBond(addBond(2));
+  hanaSay(res.stars === 3 ? 'All your cards, perfect! Eureka!' : 'Nice! Your cards will come back in Smart revise.');
+  results({ title: 'Cards done!', sub: `${plural(r.count, 'card')} practised`, stars: res.stars, color: 'yellow',
+    stats: [['⚡', 'XP earned', xp, ''], ['🎯', 'First try', res.accuracy, '%'], ['🃏', 'Cards', r.count, '']],
+    buttons: ['<button class="primary-btn" data-act="study-cards">Again</button>', '<button class="text-btn" data-act="to-course" data-course="mycards">Back to my cards</button>'] });
 }
 
 /* ================= Smart revise ================= */
@@ -491,7 +554,7 @@ function startRevise() {
   const r = buildReview(10);
   if (!r) return toast('Finish a lesson first, then its facts appear here.');
   bitSay('Beep! Smart revise mode activated.');
-  startLesson(r.course, r.lesson, { onDone: (res) => reviseDone(res, r), onQuit: quitter, onAnswer: (q, ok) => recordAnswer(q.fact, ok) });
+  startLesson(r.course, r.lesson, { onDone: (res) => reviseDone(res, r), onQuit: quitter, onAnswer: (q, ok) => { recordAnswer(q.fact, ok); quest('revise'); } });
 }
 function reviseDone(res, r) {
   const xp = 5 + res.stars * 3; S.seeds += 3; addXP(xp); addTime(res.secs); sfx.win();
@@ -541,7 +604,7 @@ if (window.matchMedia?.('(hover: hover)').matches) {
 }
 // Hana "talks": her picture bobs and glows while she speaks anywhere in the app.
 onSpeaking((who, on) => document.body.classList.toggle(`${who}-talking`, on));
-voicesReady.then(() => { if (S.tab === 'profile' && !openCourse && !openAvatar && !callActive() && !lessonActive() && !gameActive() && !breatheActive()) render(); });
+voicesReady.then(() => { if (S.tab === 'profile' && !openCourse && !openAvatar && !focusActive() && !lessonActive() && !gameActive() && !breatheActive()) render(); });
 
 /* ================= Events ================= */
 let installPrompt = null;
@@ -551,7 +614,6 @@ document.addEventListener('click', (e) => {
   const who = e.target.closest('[data-hana], [data-bit]');
   if (who && !e.target.closest('#cboard')) {
     const box = who.closest('.mascot, .bit-solo'); box?.classList.remove('talk'); void box?.offsetWidth; box?.classList.add('talk');
-    if (callActive()) return; // on a call she's already talking: just the little bounce
     if (who.dataset.bit) { const line = bitLine(); bitSay(line); toast(`Bit: ${line}`); return; }
     const r = poke(); if (!r.text) r.text = homeThought(++thought);
     const img = box?.querySelector('.hana-img');
@@ -566,6 +628,15 @@ document.addEventListener('click', (e) => {
   if (d.av !== undefined) { const [k, v] = d.av.split(':'); draftAv[k] = +v; sfx.tap(); return renderAvatarBuilder(); }
   if (d.avtab) { avTab = d.avtab; return renderAvatarBuilder(); }
   if (d.board) { S.board = d.board; save(); return render(); }
+  if (d.claim) {
+    const r = claimQuest(d.claim); if (!r) return;
+    sfx.win(); burst(t);
+    toast(r.bonus ? `🌱 +${r.seeds} seeds, including the all-quests bonus! 🎉` : `🌱 +${r.seeds} seeds`);
+    if (r.bonus) hanaSay('All three quests done! You\'re on fire today!');
+    return render();
+  }
+  if (d.delcard) { S.cards = (S.cards || []).filter((c) => c.id !== d.delcard); forgetCard(d.delcard); return render(); }
+  if (d.themeSet) { S.theme = d.themeSet; save(); applyTheme(); return render(); }
   if (d.pitch) { S.hanaPitch = d.pitch; save(); hanaSay('How about this?', { force: true }); return render(); }
   if (d.ob) {
     S.onboarded = true;
@@ -614,13 +685,11 @@ document.addEventListener('click', (e) => {
     case 'av-save': S.avatar = { ...draftAv }; save(); openAvatar = false; sfx.win(); hanaSay('Looking great!'); toast('Character saved'); return render();
     case 'av-cancel': openAvatar = false; return render();
     case 'revise': return startRevise();
-    case 'call': return openCall();
-    case 'breathe': closeSheet(); return startBreathe({ onDone: () => render(), why: needsBreak() ? `You've been learning for ${Math.round((S.timeByDay[today()] || 0) / 60)} minutes today. Nice work. Let's reset.` : '' });
+    case 'focus': return openFocus();
+    case 'study-cards': return studyCards();
+    case 'breathe': closeSheet(); return startBreathe({ onDone: () => render(), onCalm: () => { quest('breathe'); addBond(1); }, why: needsBreak() ? `You've been learning for ${Math.round((S.timeByDay[today()] || 0) / 60)} minutes today. Nice work. Let's reset.` : '' });
     case 'next-thought': { thought++; const el = document.getElementById('hc-text'); if (el) { const line = hanaLine(); typeInto(el, line); hanaSay(line); } return; }
-    case 'handsfree': S.handsFree = !S.handsFree; save(); return render();
     case 'preview-voice': hanaSay('Hi! I\'m Hana. This is how I sound. Ready to learn?', { force: true }); return;
-    case 'ai-toggle': if (!S.aiKey && !S.aiOn) return toast('Add your API key first'); S.aiOn = !S.aiOn; save(); return render();
-    case 'ai-test': { if (!S.aiKey) return toast('Add your API key first'); toast('Testing…'); import('./hana-ai.js').then((m) => m.testKey()).then((r) => { S.aiOn = true; save(); toast(`Hana AI works: "${r}"`); render(); }).catch((err) => toast(err?.message === 'key' ? 'That key didn\'t work. Check it and try again.' : 'Couldn\'t reach Anthropic. Are you online?')); return; }
     case 'game-review': if (lastGame) { const g = lastGame; showReview(g.record, { avatar: (sz) => myAvatar(sz), name: () => S.name || 'You', onBack: () => { openCourse = g.lessonId ? 'chess' : null; render(); } }); } return;
     case 'install': installPrompt?.prompt(); installPrompt = null; return;
     case 'reset': return confirmSheet('Reset all progress?', 'reset-yes');
@@ -640,16 +709,23 @@ document.addEventListener('input', (e) => {
     document.getElementById('no-results').hidden = any;
   }
   if (e.target.id === 'set-name') { S.name = e.target.value.trim(); save(); }
-  if (e.target.id === 'set-aikey') { S.aiKey = e.target.value.trim(); if (!S.aiKey) S.aiOn = false; save(); }
 });
 
 document.addEventListener('change', (e) => {
+  if (e.target.id === 'set-exam') { S.examDate = e.target.value || ''; save(); toast(S.examDate ? `Countdown set: ${examDays() ?? 0} days to go` : 'Countdown removed'); }
   if (e.target.id === 'set-hvoice') { S.hanaVoice = e.target.value; save(); hanaSay('Hi! This is my new voice.', { force: true }); }
 });
 
 document.addEventListener('submit', (e) => {
   if (e.defaultPrevented) return;
   e.preventDefault();
+  if (e.target.id === 'card-form') {
+    const front = document.getElementById('cf-front').value.trim(); const back = document.getElementById('cf-back').value.trim(); if (!front || !back) return;
+    const card = { id: `c${Date.now().toString(36)}`, front, back, tag: document.getElementById('cf-tag').value.trim() };
+    S.cards = [card, ...(S.cards || [])]; learnCard(card); sfx.pop(); toast('Card added. It\'s in Smart revise too.');
+    render(); setTimeout(() => document.getElementById('cf-front')?.focus(), 50);
+    return;
+  }
   if (e.target.id === 'habit-form') {
     const name = document.getElementById('h-name').value.trim(); if (!name) return;
     S.habits.push({ id: `h${Date.now()}`, name, emoji: document.querySelector('.emo.on')?.dataset.emo || '⭐', color: document.querySelector('.sw.on')?.dataset.col || 'purple', log: {} });
@@ -663,6 +739,8 @@ document.addEventListener('submit', (e) => {
   save(); closeSheet(); openCourse = null; render();
 });
 
+applyTheme();
+matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyTheme);
 celebrateBond(checkIn());
 render();
 

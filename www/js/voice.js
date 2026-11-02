@@ -37,8 +37,3 @@ export async function bitSay(text, { force = false } = {}) {
   return say(clean(text), { voice: hanaVoice(S.hanaVoice), lang: 'en-US', pitch: 2, rate: 1.18, onStart: () => emit('bit', true), onEnd: () => emit('bit', false) });
 }
 export const hush = () => stopSpeaking();
-
-const HANA_LINES = ['Hi! Ready to learn something new?', 'One small step a day. You\'ve got this!', 'Want to call me? I can teach you anything in the app.', 'I believe in you!', 'Fancy a game of chess later?', 'Your garden is looking good!'];
-const BIT_LINES = ['Beep boop! Systems ready!', 'Processing awesomeness.', 'Bit online. Let\'s learn!', 'Boop! Did someone say quiz?', 'My circuits love a streak.'];
-export const hanaRandom = () => HANA_LINES[Math.floor(Math.random() * HANA_LINES.length)];
-export const bitRandom = () => BIT_LINES[Math.floor(Math.random() * BIT_LINES.length)];

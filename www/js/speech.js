@@ -1,12 +1,10 @@
 // One speech layer for the whole app.
-// In the Android app (Capacitor) it uses the phone's native text-to-speech and speech recognition,
-// because Android's WebView has no Web Speech API. In browsers it uses speechSynthesis / SpeechRecognition.
+// In the Android app (Capacitor) it uses the phone's native text-to-speech, because Android's WebView
+// has no Web Speech API. In browsers it uses speechSynthesis.
 const cap = typeof window !== 'undefined' ? window.Capacitor : null;
 const isNative = !!cap?.isNativePlatform?.();
 const plugin = (name) => (isNative && cap?.isPluginAvailable?.(name) ? (cap.registerPlugin ? cap.registerPlugin(name) : cap.Plugins?.[name]) : null);
 const TTS = plugin('TextToSpeech');
-const STT = plugin('SpeechRecognition');
-const WebRec = typeof window !== 'undefined' ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null;
 
 // voices: [{ name, lang, index (native) | voice (web) }]
 let voices = [];
@@ -81,30 +79,4 @@ export async function say(text, { lang = 'en-US', voice = null, pitch = 1, rate 
 export function stopSpeaking() {
   try { if (TTS) TTS.stop(); else if ('speechSynthesis' in window) speechSynthesis.cancel(); } catch { /* ignore */ }
   speakingCount = 0;
-}
-
-/* ---------- listening ---------- */
-export const canListen = () => !!STT || !!WebRec;
-let webRec = null;
-export async function listen({ lang = 'en-GB' } = {}) {
-  if (STT) {
-    const ok = await STT.available().catch(() => ({ available: false }));
-    if (!ok.available) throw new Error('unavailable');
-    const perm = await STT.requestPermissions().catch(() => null);
-    if (perm && perm.speechRecognition && perm.speechRecognition !== 'granted') throw new Error('denied');
-    const res = await STT.start({ language: lang, maxResults: 3, partialResults: false, popup: false });
-    return (res?.matches || [])[0] || '';
-  }
-  if (!WebRec) throw new Error('unavailable');
-  return new Promise((resolve, reject) => {
-    webRec = new WebRec(); webRec.lang = lang; webRec.interimResults = false; webRec.maxAlternatives = 3;
-    let got = '';
-    webRec.onresult = (e) => { got = e.results[0][0].transcript; };
-    webRec.onerror = (e) => reject(new Error(e.error || 'error'));
-    webRec.onend = () => { webRec = null; resolve(got); };
-    webRec.start();
-  });
-}
-export function stopListening() {
-  try { if (STT) STT.stop(); else webRec?.stop(); } catch { /* ignore */ }
 }

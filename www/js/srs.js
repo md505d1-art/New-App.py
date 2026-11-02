@@ -62,8 +62,34 @@ export function recordAnswer(factId, ok) {
   S.mem[factId] = m; save();
 }
 
+/* ---------- your own flashcards ---------- */
+// S.cards: [{ id, front, back, tag }]. Each card is a fact in Smart revise ("own:<id>").
+const OWN = { name: 'My flashcards', tts: null };
+export function cardFact(card) {
+  const others = (S.cards || []).filter((x) => x.id !== card.id && x.back !== card.back);
+  const kicker = card.tag ? `${card.tag} · my card` : 'My card';
+  return { id: `own:${card.id}`, c: OWN, make: () => {
+    const r = Math.random();
+    if (others.length >= 3 && r < 0.4) return mc(card.front, card.back, pick(others.map((x) => x.back), 3), { kicker });
+    if (card.back.length <= 30 && r < 0.7) return { type: 'wordfill', kicker: `${kicker} · type it`, prompt: card.front, before: '', after: '', answer: card.back };
+    return { type: 'flash', kicker, prompt: 'Do you know this one?', front: `<b>${esc(card.front)}</b>`, back: esc(card.back) };
+  } };
+}
+const esc = (t) => String(t).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+export function learnCard(card) { S.mem = S.mem || {}; S.mem[`own:${card.id}`] = { box: 1, due: today() }; save(); }
+export function forgetCard(id) { if (S.mem) delete S.mem[`own:${id}`]; save(); }
+// A practice session with all your cards (weakest first).
+export function buildCards(limit = 15) {
+  const cards = [...(S.cards || [])].sort((a, b) => (S.mem?.[`own:${a.id}`]?.box || 0) - (S.mem?.[`own:${b.id}`]?.box || 0)).slice(0, limit);
+  if (!cards.length) return null;
+  const qs = shuffle(cards.map((cd) => { const f = cardFact(cd); return { ...f.make(), fact: f.id }; }));
+  return { course: { id: 'mycards', name: 'My flashcards', color: 'yellow', questions: () => qs, tts: null },
+    lesson: { id: 'mycards', title: 'My flashcards', noIntro: true, unit: { desc: 'Cards you made' } }, count: qs.length };
+}
+
 function allLearnedFacts() {
   const out = [];
+  for (const card of S.cards || []) { const f = cardFact(card); if (S.mem?.[f.id]) out.push({ ...f, mem: S.mem[f.id] }); }
   for (const c of Object.values(COURSES)) for (const l of lessonsOf(c)) {
     if (!S.done[l.id]) continue;
     for (const f of lessonFacts(c, l)) if (S.mem?.[f.id]) out.push({ ...f, c, mem: S.mem[f.id] });

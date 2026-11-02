@@ -23,8 +23,8 @@ let B = null;
 export const breatheActive = () => !!B;
 
 // why: optional reason shown at the top ("You've been studying for 30 minutes")
-export function startBreathe({ onDone, why = '' } = {}) {
-  B = { onDone, why, mode: 'pick', pattern: S.calmPattern || 'quick', mins: S.calmMins || 1, step: 0, phaseEnd: 0, end: 0, raf: 0, breaths: 0, started: 0, g: 0, paused: false };
+export function startBreathe({ onDone, onCalm, why = '' } = {}) {
+  B = { onDone, onCalm, why, mode: 'pick', pattern: S.calmPattern || 'quick', mins: S.calmMins || 1, step: 0, phaseEnd: 0, end: 0, raf: 0, breaths: 0, started: 0, g: 0, paused: false };
   render();
   say(pick(['Let\'s take a little break together. Pick one and get comfy.', 'Time to reset. Shoulders down, jaw relaxed. Ready?']), true);
 }
@@ -133,7 +133,7 @@ function logCalm(mins) {
   if (mins < 0.2) return;
   S.calm = S.calm || { sessions: 0, mins: 0, days: {} };
   S.calm.sessions++; S.calm.mins += mins; S.calm.days[today()] = (S.calm.days[today()] || 0) + mins; S.calm.last = Date.now();
-  save();
+  save(); B.onCalm?.(mins);
 }
 
 function close() {

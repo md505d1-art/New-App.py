@@ -2,7 +2,7 @@
   "name": "sprout",
   "version": "1.0.0",
   "private": true,
-  "description": "Sprout: bite-sized chess opening and Spanish lessons plus a habit tracker, in a playful cartoon style.",
+  "description": "Sprout: GCSE revision, languages, sign language and chess with Hana, a friendly study buddy. Works offline.",
   "scripts": {
     "start": "npx --yes http-server www -p 8080 -c-1",
     "check": "node scripts/check-gambits.mjs",
@@ -15,8 +15,7 @@
   "dependencies": {
     "@capacitor/android": "^8.0.0",
     "@capacitor/core": "^8.0.0",
-    "@capacitor-community/text-to-speech": "^8.0.2",
-    "@capacitor-community/speech-recognition": "^7.0.1"
+    "@capacitor-community/text-to-speech": "^8.0.2"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",
