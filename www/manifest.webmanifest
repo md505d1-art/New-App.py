@@ -1,7 +1,7 @@
 {
   "name": "Sprout",
   "short_name": "Sprout",
-  "description": "Bite-sized lessons for chess openings and Spanish, plus a daily habit tracker.",
+  "description": "GCSE revision, 34 languages, sign language and chess, with Hana as your study buddy. Works offline.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
