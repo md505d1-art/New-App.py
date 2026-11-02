@@ -20,8 +20,9 @@ export async function showReview(rec, opts) {
     let done = 0;
     progress(0, missing.length);
     for (const i of missing) {
+      const mine = R;
       const r = await engines().analyst.ask({ type: 'eval', fen: R.positions[i], ms: 380 });
-      if (!R) return;
+      if (R !== mine) return; // closed (or another review opened) while analysing
       rec.evals[i] = { score: r.score, best: r.best }; progress(++done, missing.length);
     }
   }
@@ -31,7 +32,7 @@ export async function showReview(rec, opts) {
 export const reviewActive = () => !!R;
 
 function progress(n, total) {
-  document.getElementById('app').innerHTML = `<div class="review loading"><div class="rv-load">${mascot('think', 140)}
+  document.getElementById('app').innerHTML = `<div class="review loading"><header class="cg-head"><button class="nav-ic" data-rv="back" aria-label="Stop the review">✕</button><div class="cg-title"><b>Game review</b></div><span class="nav-ic ghost"></span></header><div class="rv-load">${mascot('think', 140)}
     <h2>Hana is reviewing your game…</h2><p class="muted">Checking every position (${n} of ${total})</p>
     <span class="bar"><i style="width:${(n / total) * 100}%;animation:none"></i></span></div></div>`;
 }

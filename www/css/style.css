@@ -747,3 +747,22 @@ body.bit-talking .mascot .bit-img, body.bit-talking .bit-solo img { animation: t
 .call-stage.tight .call-name { font-size: 18px; } .call-stage.tight .call-name small { font-size: 12px; }
 .call-stage.tight .call-sub { font-size: 13px; min-height: 0; }
 .captions { flex-shrink: 1; min-height: 0; }
+
+/* ---------- Hana's personality: thoughts, friendship ---------- */
+.hc-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.bond-chip { display: inline-grid; grid-template-columns: auto auto; align-items: center; column-gap: 6px; padding: 3px 9px 5px; border-radius: 99px; background: var(--primary-l); font-size: 11.5px; font-weight: 700; color: var(--primary); }
+.bond-chip small { font-size: 10.5px; color: var(--muted); font-weight: 700; justify-self: end; }
+.bond-chip .bar.thin { grid-column: 1 / -1; height: 4px; margin-top: 3px; background: var(--bar-soft); }
+#hc-text { min-height: 3.1em; }
+.hc-more { margin: 8px 8px 0 0; padding: 8px 12px; border-radius: 99px; background: var(--lav); color: var(--primary); font-weight: 700; font-size: 13.5px; }
+.hc-more:active { transform: scale(.96); }
+.hana-card .mascot { cursor: pointer; }
+.hana-card .hana-img { transition: transform .25s var(--ease); }
+.hana-card .mascot.talk .hana-img { animation: poke-bounce .5s var(--ease); }
+@keyframes poke-bounce { 0% { transform: scale(1); } 30% { transform: scale(1.08, .94) translateY(3px); } 60% { transform: scale(.97, 1.04) translateY(-4px); } 100% { transform: scale(1); } }
+.bond-card { display: flex; align-items: center; gap: 12px; padding: 14px; }
+.bond-card .bc-txt { flex: 1; } .bond-card b { color: var(--ink); } .bond-card small { color: var(--muted); display: block; margin-top: 2px; }
+.bond-card .bar { margin-top: 8px; }
+.bond-card .bc-lv { font-size: 26px; }
+.hana-card .mascot { margin-left: 10px; } /* room for Bit, who floats off Hana's shoulder */
+.review.loading { position: relative; } .review.loading .cg-head { position: absolute; top: 0; left: 0; right: 0; }

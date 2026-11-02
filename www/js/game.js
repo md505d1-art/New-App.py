@@ -27,7 +27,7 @@ export function startGame(opts, callbacks) {
   api = callbacks; engines();
   const c = new Chess(opts.fen || undefined);
   G = { c, startFen: c.fen(), startTurn: c.turn(), side: opts.side || 'w', level: opts.level || 1, title: opts.title || 'Free play', idea: opts.idea || '',
-    prefix: opts.prefix || [], lessonId: opts.lessonId || null, moves: [], evals: [], classes: [], gen: 0,
+    prefix: opts.prefix || [], lessonId: opts.lessonId || null, moves: [], evals: [], classes: [], gen: 0, pending: new Set(),
     sel: null, targets: [], last: null, hint: null, thinking: false, over: null, flip: false, promo: null,
     coach: { mood: 'happy', html: opts.intro || 'Good luck!' }, started: Date.now() };
   chessSound.start();
@@ -172,21 +172,24 @@ function afterMove(mv, isUser, animate = true) {
 
 async function aiTurn() {
   G.thinking = true; draw();
-  const gen = G.gen;
+  const game = G; const gen = G.gen;
   const [res] = await Promise.all([engines().player.ask({ type: 'best', fen: G.c.fen(), level: G.level }), wait(550)]);
-  if (!G || gen !== G.gen || !res.move || G.over) return;
+  // Ignore replies for a game that was left, restarted or undone while Hana was thinking.
+  if (G !== game || gen !== G.gen || !res?.move || G.over) return;
   const mv = G.c.move({ from: res.move.from, to: res.move.to, promotion: res.move.promotion || 'q' });
   afterMove(mv, false);
 }
 
 function queueEval(k) {
-  const gen = G.gen; const fen = G.c.fen();
-  engines().analyst.ask({ type: 'eval', fen, ms: 450 }).then((r) => {
-    if (!G || gen !== G.gen) return;
+  const game = G; const gen = G.gen; const fen = G.c.fen();
+  const job = engines().analyst.ask({ type: 'eval', fen, ms: 450 }).then((r) => {
+    game.pending.delete(job);
+    if (G !== game || gen !== G.gen || !r) return;
     G.evals[k] = { score: r.score, best: r.best };
     classify(k - 1); classify(k);
     refreshSide();
   });
+  game.pending.add(job);
 }
 
 function classify(i) {
@@ -222,18 +225,27 @@ function finishByRules() {
 }
 
 function endGame(result, how) {
-  G.over = result; G.thinking = false; G.gen++;
+  G.over = result; G.thinking = false; // Hana's pending reply is ignored because the game is over
   chessSound.end();
   say(result === 'win' ? 'cheer' : result === 'draw' ? 'happy' : 'sad', result === 'win' ? 'You beat me! Let\'s look at your game.' : result === 'draw' ? 'A draw. Well fought!' : 'I win this time. Let\'s review it together.');
   hanaSay(result === 'win' ? 'You beat me! Amazing!' : result === 'draw' ? 'A draw. Well played!' : 'Good game! Let\'s review it together.');
   draw();
+  // Let the last positions finish being analysed (so accuracy is right), then show the results,
+  // unless the player has already left or started another game.
+  const game = G;
+  Promise.all([Promise.race([Promise.all([...game.pending]), wait(2500)]), wait(1400)]).then(() => {
+    if (G !== game) return;
+    G = null; api.onFinish(summaryOf(game, result, how));
+  });
+}
+function summaryOf(G, result, how) {
   const record = { startFen: G.startFen, startTurn: G.startTurn, prefix: G.prefix, moves: G.moves, evals: G.evals.slice(), classes: G.classes.slice(), side: G.side, title: G.title, level: G.level, result, how };
   const counts = {}; G.classes.forEach((cl, i) => { if (G.moves[i].color === G.side) counts[cl] = (counts[cl] || 0) + 1; });
   const worstI = G.classes.reduce((w, cl, i) => (G.moves[i].color !== G.side ? w : (['blunder', 'mistake', 'inaccuracy'].indexOf(cl) > -1 && (w < 0 || ['blunder', 'mistake', 'inaccuracy'].indexOf(cl) < ['blunder', 'mistake', 'inaccuracy'].indexOf(G.classes[w])) ? i : w)), -1);
   const worst = worstI >= 0 ? { san: G.moves[worstI].san, best: G.evals[worstI]?.best?.san, label: CLASS[G.classes[worstI]].label, move: `${Math.floor((G.prefix.length + worstI) / 2) + 1}${(G.prefix.length + worstI) % 2 ? '...' : '.'}` } : null;
-  const summary = { result, how, accuracy: Math.round(sideAccuracy(record, G.side) ?? 0), counts, level: G.level, lessonId: G.lessonId, title: G.title, worst, record,
+  const acc = sideAccuracy(record, G.side);
+  return { result, how, accuracy: acc == null ? null : Math.round(acc), counts, level: G.level, lessonId: G.lessonId, title: G.title, worst, record,
     moves: G.moves.length, secs: Math.round((Date.now() - G.started) / 1000) };
-  setTimeout(() => { G = null; api.onFinish(summary); }, 1400);
 }
 
 /* ---------- input: tap or drag ---------- */
@@ -288,10 +300,10 @@ document.addEventListener('click', (e) => {
   if (a === 'flip') { G.flip = !G.flip; return draw(); }
   if (a === 'hint') {
     if (!api.spendSeeds(10)) return;
-    const k = G.moves.length; const show = (best) => { if (!G || !best) return; G.hint = best; say('think', `Try <b class="mono">${esc(best.san)}</b>. Follow the arrow.`); chessSound.notify(); bitSay(`Try ${best.san}!`); draw(); };
+    const game = G; const k = G.moves.length; const show = (best) => { if (G !== game || !best) return; G.hint = best; say('think', `Try <b class="mono">${esc(best.san)}</b>. Follow the arrow.`); chessSound.notify(); bitSay(`Try ${best.san}!`); draw(); };
     if (G.evals[k]?.best) return show(G.evals[k].best);
     G.thinking = true; draw();
-    engines().analyst.ask({ type: 'eval', fen: G.c.fen(), ms: 700 }).then((r) => { if (!G) return; G.thinking = false; show(r.best); });
+    engines().analyst.ask({ type: 'eval', fen: G.c.fen(), ms: 700 }).then((r) => { if (G !== game) return; G.thinking = false; show(r?.best); });
     return;
   }
   if (a === 'undo') {

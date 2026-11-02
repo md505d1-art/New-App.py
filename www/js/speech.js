@@ -68,10 +68,13 @@ export async function say(text, { lang = 'en-US', voice = null, pitch = 1, rate 
       const u = new SpeechSynthesisUtterance(t);
       if (v?.voice) { u.voice = v.voice; u.lang = v.voice.lang; } else u.lang = lang;
       u.pitch = pitch; u.rate = rate;
-      u.onstart = () => { speakingCount++; onStart?.(); };
-      u.onend = u.onerror = () => { if (speakingCount) done(); resolve(); };
+      let started = false;
+      u.onstart = () => { started = true; speakingCount++; onStart?.(); };
+      u.onend = u.onerror = () => { if (started && speakingCount) done(); resolve(); };
       speechSynthesis.speak(u);
-      setTimeout(resolve, 15000 + t.length * 90); // safety net if onend never fires
+      // Safety nets: some browsers silently drop an utterance (it never starts), or never fire onend.
+      setTimeout(() => { if (!started) resolve(); }, 4000);
+      setTimeout(resolve, 15000 + t.length * 90);
     });
   } catch { if (speakingCount) done(); }
 }

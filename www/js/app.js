@@ -1,12 +1,13 @@
 import { COURSES, CATEGORIES, gambitStart, GAMBITS, GCSE_MFL } from './courses.js';
 import { avatarSVG, AV_OPTIONS, AV_LABELS, DEFAULT_AVATAR, randomAvatar } from './avatar.js';
-import { hanaSay, bitSay, hanaRandom, bitRandom } from './voice.js';
+import { hanaSay, bitSay } from './voice.js';
 import { learnLesson, recordAnswer, dueCount, buildReview, memoryScore } from './srs.js';
 import { showReview } from './review.js';
 import { startCall, callActive } from './call.js';
 import { englishVoices, hanaVoice, voicesReady, canListen } from './speech.js';
 import { onSpeaking, HANA_PITCH } from './voice.js';
-import { mascot, bitIcon } from './mascot.js';
+import { mascot, bitIcon, POSE } from './mascot.js';
+import { homeThought, poke, bitLine, bond, checkIn, levelUpLine, addBond, remember } from './persona.js';
 import { badge, icon, thumb, medal, sun, plant, col } from './art.js';
 import { S, save, reset, addXP, addTime, streakAlive, today, dayOffset, esc, sfx, burst, countUp, toast } from './store.js';
 import { startLesson, lessonActive } from './lesson.js';
@@ -22,6 +23,8 @@ const glyphOf = (c) => c.flag || c.glyph;
 const boardPills = (c) => (c.boards ? `<span class="boards">${c.boards.map((b) => `<i class="bp-${b.toLowerCase()}">${b}</i>`).join('')}</span>` : '');
 
 /* ================= Helpers ================= */
+const pick = (a) => a[Math.floor(Math.random() * a.length)];
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const lessonsOf = (c) => c.units.flatMap((u, ui) => u.lessons.map((l, li) => ({ ...l, ui, li, unit: u })));
 const progressOf = (c) => { const ls = lessonsOf(c); const done = ls.filter((l) => S.done[l.id]).length; return { done, total: ls.length, pct: ls.length ? done / ls.length : 0 }; };
 const nextLesson = (c) => lessonsOf(c).find((l) => !S.done[l.id]) || null;
@@ -85,11 +88,21 @@ function renderOnboarding() {
 function greeting() { const h = new Date().getHours(); return h < 12 ? 'Good morning,' : h < 18 ? 'Good afternoon,' : 'Good evening,'; }
 function weekDays() { const d = new Date(); const back = (d.getDay() + 6) % 7; return [...Array(7)].map((_, k) => dayOffset(k - back)); }
 
-function hanaLine() {
-  const due = dueCount(); const s = streakAlive() ? S.streak : 0;
-  if (due) return `You have ${due} fact${due === 1 ? '' : 's'} ready to revise. Let's keep them fresh!`;
-  if (s >= 3) return `${s} days in a row! Bit is doing a happy dance.`;
-  return 'Pick up where you left off, or try something new today.';
+let thought = 0;
+const hanaLine = () => homeThought(thought);
+function bondChip() {
+  const b = bond();
+  return `<div class="bond-chip" title="Friendship with Hana"><span>${b.emoji} ${b.name}</span><small>Lv ${b.level}</small><span class="bar thin"><i style="width:${Math.round(b.pct * 100)}%"></i></span></div>`;
+}
+// Celebrate a friendship level-up (from lessons, calls, chatting or daily visits).
+function celebrateBond(up) { if (!up) return; const line = levelUpLine(up); setTimeout(() => { toast(`💜 ${line}`); hanaSay(line); }, 900); }
+// Type Hana's words into her speech bubble, letter by letter.
+let typer = null;
+function typeInto(el, text) {
+  clearInterval(typer);
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) { el.textContent = text; return; }
+  let i = 0; el.textContent = '';
+  typer = setInterval(() => { i += 2; el.textContent = text.slice(0, i); if (i >= text.length) clearInterval(typer); }, 24);
 }
 function reviewCard() {
   const learned = Object.keys(S.mem || {}).length; if (!learned) return '';
@@ -121,7 +134,8 @@ function homeScreen() {
       <p>${streak > 1 ? `Awesome! You've been learning for ${streak} days in a row.` : streak === 1 ? 'Great start! Come back tomorrow to grow your streak.' : 'Finish a lesson today to start your streak.'}</p>
     </section>
 
-    <section class="hana-card rise" style="--i:1">${mascot('happy', 92)}<div class="hc-bubble"><b>Hana</b><p>${esc(hanaLine())}</p>
+    <section class="hana-card rise" style="--i:1">${mascot('happy', 104)}<div class="hc-bubble"><div class="hc-top"><b>Hana</b>${bondChip()}</div><p id="hc-text" aria-live="polite">${esc(hanaLine())}</p>
+      <button class="hc-more" data-act="next-thought" aria-label="What else is Hana thinking?">💭 What else?</button>
       <button class="hc-call" data-act="call"><span>📞</span> Call me. I'll teach you anything</button></div></section>
     <div class="quick rise" style="--i:1">
       <button data-act="call"><span>📞</span>Call Hana</button>
@@ -267,7 +281,7 @@ function progressScreen() {
       <section class="garden rise" style="--i:4">${plants.map((c, i) => `<button class="plot" data-open="${c.id}" style="--i:${i}">${plant(stage(c), c.color, 56)}<b>${c.flag ? `${c.flag} ` : ''}${esc(c.name)}</b><small>${Math.round(progressOf(c).pct * 100)}%</small></button>`).join('')}</section>` : ''}
     <div class="sec-row rise" style="--i:5"><h2>Chess game review</h2></div>
     <section class="list-card rise" style="--i:5">${S.games.length ? S.games.slice(0, 6).map((g) => `<div class="row"><span class="res-chip r-${g.result}">${{ win: 'Won', draw: 'Draw', loss: 'Lost' }[g.result]}</span>
-        <span class="row-txt"><b>${esc(g.title)}</b><small>${esc(g.date)} · ${['', 'Easy', 'Medium', 'Hard'][g.level]} · ${g.accuracy}% accuracy</small>
+        <span class="row-txt"><b>${esc(g.title)}</b><small>${esc(g.date)} · ${['', 'Easy', 'Medium', 'Hard'][g.level]}${g.accuracy == null ? "" : ` · ${g.accuracy}% accuracy`}</small>
         ${g.worst ? `<small class="worst">Avoid next time: <span class="mono">${esc(g.worst.move)}${esc(g.worst.san)}</span> (${esc(g.worst.label)})${g.worst.best ? `, <span class="mono">${esc(g.worst.best)}</span> was better` : ''}</small>` : '<small class="worst ok">No big mistakes. Nice!</small>'}</span></div>`).join('')
       : '<p class="muted pad">Play a chess game and it will show up here, with the one mistake to avoid next time.</p>'}</section>
   </div>`;
@@ -284,9 +298,12 @@ function profileScreen() {
   ];
   return `<div class="profile">
     <section class="profile-card rise"><div class="pc-av">${myAvatar(108)}</div>
-      <div class="pc-text"><h1>${esc(S.name || 'Your profile')}</h1><p>${started().length} courses · ${Object.keys(S.done).length} lessons</p>
+      <div class="pc-text"><h1>${esc(S.name || 'Your profile')}</h1><p>${plural(started().length, 'course')} · ${plural(Object.keys(S.done).length, 'lesson')}</p>
         <div class="chips"><span>🔥 ${streakAlive() ? S.streak : 0} day streak</span><span>⚡ ${S.xp} XP</span><span>🌱 ${S.seeds} seeds</span></div>
         <button class="edit-av" data-act="avatar">✏️ Edit your character</button></div></section>
+    ${(() => { const b = bond(); return `<div class="sec-row rise" style="--i:1"><h2>You and Hana</h2></div>
+    <section class="list-card bond-card rise" style="--i:1">${mascot('happy', 64, { bit: false })}<div class="bc-txt"><b>${b.emoji} ${b.name}</b><small>Friendship level ${b.level} · ${b.next ? `${b.next.at - b.points} points to ${b.next.name}` : 'Top level!'}</small>
+      <span class="bar"><i style="width:${Math.round(b.pct * 100)}%"></i></span><small>Grows every day you visit, and with lessons, calls, chess and chatting.</small></div></section>`; })()}
     <div class="sec-row rise" style="--i:1"><h2>Badges</h2></div>
     <div class="badges rise" style="--i:1">${badges.map(([e, n, d, ok]) => `<div class="bdg ${ok ? 'got' : ''}"><span>${e}</span><b>${n}</b><small>${d}</small></div>`).join('')}</div>
     <div class="sec-row rise" style="--i:2"><h2>Bookshelf</h2><button class="see-all" data-act="addbook">+ Add book</button></div>
@@ -375,8 +392,9 @@ function nextAfter(c, id) { const ls = lessonsOf(c); const i = ls.findIndex((x) 
 function lessonDone(c, l, r) {
   const first = !S.done[l.id];
   S.done[l.id] = Math.max(starsOf(l.id), r.stars);
-  learnLesson(c, l);
-  hanaSay(r.stars === 3 ? 'Perfect lesson! Amazing!' : 'Lesson complete! Great work.');
+  learnLesson(c, l); remember(`${l.title.length > 38 && l.unit ? l.unit.title : l.title} in ${c.name}`);
+  hanaSay(r.stars === 3 ? pick(['Perfect lesson! Eureka!', 'Perfect! I\'m framing this one.', 'Three stars! Bit, fireworks please!']) : r.stars === 2 ? pick(['Lesson complete! Great work.', 'Nicely done! Nearly perfect.']) : pick(['Lesson complete! The tricky ones will come back in Smart revise.', 'Done! Every mistake today is a right answer tomorrow.']));
+  celebrateBond(addBond(3));
   const xp = 10 + r.stars * 2 + (r.bestCombo >= 5 ? 5 : 0); const seeds = first ? 5 + r.stars : 1;
   S.seeds += seeds; addXP(xp); addTime(r.secs); sfx.win();
   const nx = nextAfter(c, l.id);
@@ -417,11 +435,11 @@ function gameDone(r) {
   S.games.unshift({ date: new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'short' }), title: r.title, result: r.result, accuracy: r.accuracy, level: r.level, worst: r.worst });
   S.games = S.games.slice(0, 20);
   S.seeds += seeds; addXP(xp); addTime(r.secs);
-  lastGame = r;
+  lastGame = r; celebrateBond(addBond(2));
   if (pass) sfx.win(); else sfx.bad();
   const nx = r.lessonId ? nextAfter(COURSES.chess, r.lessonId) : null;
-  results({ title: r.result === 'win' ? 'You won!' : r.result === 'draw' ? 'It\'s a draw!' : 'Hana won this one', sub: `${esc(r.how)} · ${r.moves} moves`, good: pass, color: pass ? 'green' : 'red',
-    stats: [['⚡', 'XP earned', xp, ''], ['🎯', 'Accuracy', r.accuracy, '%'], ['🌱', 'Seeds', seeds, '']],
+  results({ title: r.result === 'win' ? 'You won!' : r.result === 'draw' ? 'It\'s a draw!' : 'Hana won this one', sub: `${esc(r.how)} · ${plural(r.moves, 'move')}`, good: pass, color: pass ? 'green' : 'red',
+    stats: [['⚡', 'XP earned', xp, ''], r.accuracy == null ? ['♟', 'Moves', r.moves, ''] : ['🎯', 'Accuracy', r.accuracy, '%'], ['🌱', 'Seeds', seeds, '']],
     note: r.worst ? `<p class="review-note">Watch out for <span class="mono">${esc(r.worst.move)}${esc(r.worst.san)}</span> (${esc(r.worst.label)})${r.worst.best ? `. <span class="mono">${esc(r.worst.best)}</span> was better.` : '.'}</p>` : '',
     buttons: [
       `<button class="primary-btn review-btn" data-act="game-review">🔍 Game review</button>`,
@@ -449,7 +467,7 @@ function renderAvatarBuilder() {
 function openCall() {
   startCall({
     onEnd: (secs) => { if (secs) addTime(secs); toast(`Call ended · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`); render(); },
-    onLessonDone: ({ c, l, stars }) => { const first = !S.done[l.id]; S.done[l.id] = Math.max(starsOf(l.id), stars); learnLesson(c, l); S.seeds += first ? 5 : 1; addXP(10 + stars * 2); },
+    onLessonDone: ({ c, l, stars }) => { const first = !S.done[l.id]; S.done[l.id] = Math.max(starsOf(l.id), stars); learnLesson(c, l); S.seeds += first ? 5 : 1; addXP(10 + stars * 2); addBond(3); },
     chess: () => { S.tab = 'explore'; openCourse = 'chess'; render(); },
     revise: () => startRevise(),
   });
@@ -465,7 +483,7 @@ function startRevise() {
 function reviseDone(res, r) {
   const xp = 5 + res.stars * 3; S.seeds += 3; addXP(xp); addTime(res.secs); sfx.win();
   hanaSay('Revision done! Those facts will stick now.');
-  results({ title: 'Revision done!', sub: `${r.count} facts reviewed`, stars: res.stars, color: 'purple',
+  results({ title: 'Revision done!', sub: `${plural(r.count, 'fact')} reviewed`, stars: res.stars, color: 'purple',
     stats: [['⚡', 'XP earned', xp, ''], ['🎯', 'First try', res.accuracy, '%'], ['🧠', 'Still due', dueCount(), '']],
     buttons: [dueCount() ? '<button class="primary-btn" data-act="revise">Keep revising</button>' : '', '<button class="text-btn" data-act="home">Back home</button>'] });
 }
@@ -520,7 +538,14 @@ document.addEventListener('click', (e) => {
   const who = e.target.closest('[data-hana], [data-bit]');
   if (who && !e.target.closest('#cboard')) {
     const box = who.closest('.mascot, .bit-solo'); box?.classList.remove('talk'); void box?.offsetWidth; box?.classList.add('talk');
-    if (who.dataset.bit) { bitSay(bitRandom()); toast(`Bit: ${bitRandom()}`); } else { const line = hanaRandom(); hanaSay(line); toast(`Hana: ${line}`); }
+    if (callActive()) return; // on a call she's already talking: just the little bounce
+    if (who.dataset.bit) { const line = bitLine(); bitSay(line); toast(`Bit: ${line}`); return; }
+    const r = poke(); if (!r.text) r.text = homeThought(++thought);
+    const img = box?.querySelector('.hana-img');
+    if (img) { img.src = `img/${POSE[r.mood] || POSE.happy}.webp`; clearTimeout(img._back); img._back = setTimeout(() => { img.src = `img/${POSE.happy}.webp`; }, 4000); }
+    const bubble = who.closest('.hana-card')?.querySelector('#hc-text');
+    if (bubble) typeInto(bubble, r.text); else toast(`Hana: ${r.text}`);
+    hanaSay(r.text);
     return;
   }
   const t = e.target.closest('button'); if (!t) return;
@@ -577,6 +602,7 @@ document.addEventListener('click', (e) => {
     case 'av-cancel': openAvatar = false; return render();
     case 'revise': return startRevise();
     case 'call': return openCall();
+    case 'next-thought': { thought++; const el = document.getElementById('hc-text'); if (el) { const line = hanaLine(); typeInto(el, line); hanaSay(line); } return; }
     case 'handsfree': S.handsFree = !S.handsFree; save(); return render();
     case 'preview-voice': hanaSay('Hi! I\'m Hana. This is how I sound. Ready to learn?', { force: true }); return;
     case 'ai-toggle': if (!S.aiKey && !S.aiOn) return toast('Add your API key first'); S.aiOn = !S.aiOn; save(); return render();
@@ -623,6 +649,7 @@ document.addEventListener('submit', (e) => {
   save(); closeSheet(); openCourse = null; render();
 });
 
+celebrateBond(checkIn());
 render();
 
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {

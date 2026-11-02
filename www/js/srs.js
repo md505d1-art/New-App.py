@@ -88,9 +88,10 @@ export function buildReview(limit = 10) {
   };
 }
 
-// Memory strength for a course: share of its learned facts that are in box 3 or higher.
+// Memory strength for a course: how far its learned facts have climbed the boxes
+// (just learned = 20%, remembered over a few weeks = 100%).
 export function memoryScore(c) {
   const ids = lessonsOf(c).filter((l) => S.done[l.id]).flatMap((l) => lessonFacts(c, l).map((f) => f.id)).filter((id) => S.mem?.[id]);
   if (!ids.length) return null;
-  return Math.round((ids.filter((id) => S.mem[id].box >= 3).length / ids.length) * 100);
+  return Math.round((ids.reduce((sum, id) => sum + Math.min(5, Math.max(1, S.mem[id].box || 1)), 0) / ids.length / 5) * 100);
 }

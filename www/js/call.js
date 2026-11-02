@@ -106,7 +106,7 @@ async function connect() {
   render();
   C.tutor = createTutor({ say: speakLine, action: onAction });
   const call = C;
-  call.pickUp(call.tutor.greet());
+  call.pickUp(call.tutor.greet().catch((e) => console.error('Hana greeting failed', e)));
   await call.queue;
   if (C === call) autoListen();
 }
@@ -136,7 +136,8 @@ function heard(text) {
   if (!C || !text?.trim()) return;
   addCaption('you', text.trim());
   const call = C;
-  call.queue = call.queue.then(async () => { if (C === call && !call.ended) await call.tutor?.hear(text.trim()); }).catch(() => {});
+  call.queue = call.queue.then(async () => { if (C === call && !call.ended) await call.tutor?.hear(text.trim()); })
+    .catch((e) => console.error('Hana could not answer', e)); // keep the queue going for the next message
   return call.queue.then(() => { if (C === call) autoListen(); });
 }
 
@@ -160,6 +161,7 @@ async function startListening() {
     C.listening = false; setStatus();
     if (e?.message === 'denied') toast('Microphone permission is off. You can type instead.');
     else if (e?.message === 'unavailable') { toast('Voice input isn\'t available here. You can type instead.'); C.typing = true; render(); }
+    else if (!C.ended) { const sub = document.getElementById('call-sub'); if (sub) sub.textContent = 'I didn\'t catch that. Tap Talk to try again, or type.'; }
   }
 }
 

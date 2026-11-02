@@ -1,6 +1,6 @@
 // Hana — Sprout's guide, from the character sheet — and Bit, her floating triangle robot.
 // mood: 'happy' | 'cheer' | 'think' | 'sad' | 'wave' (full body)
-const POSE = { happy: 'hana-happy', cheer: 'hana-happy', think: 'hana-think', sad: 'hana-annoyed', wave: 'hana-full', full: 'hana-full' };
+export const POSE = { happy: 'hana-happy', cheer: 'hana-happy', think: 'hana-think', sad: 'hana-annoyed', wave: 'hana-full', full: 'hana-full' };
 
 export function mascot(mood = 'happy', size = 120, { bit = true } = {}) {
   const pose = POSE[mood] || POSE.happy;

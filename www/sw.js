@@ -1,6 +1,6 @@
 // Offline support: everything the app needs is cached on install, so lessons, chess and
 // Hana all work with no connection.
-const CACHE = 'sprout-v8';
+const CACHE = 'sprout-v9';
 const SHELL = [
  "./",
  "css/fonts.css",
@@ -48,6 +48,7 @@ const SHELL = [
  "js/hana-ai.js",
  "js/lesson.js",
  "js/mascot.js",
+ "js/persona.js",
  "js/review.js",
  "js/speech.js",
  "js/srs.js",

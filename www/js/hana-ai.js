@@ -8,7 +8,8 @@ async function client() {
   return new Anthropic({ apiKey: S.aiKey, dangerouslyAllowBrowser: true, maxRetries: 1, timeout: 30000 });
 }
 
-const SYSTEM = `You are Hana, the friendly guide in Sprout, a learning app for a UK Year 11 student revising for GCSEs, learning languages and playing chess. You are upbeat, warm and a bit playful; you love tinkering with gadgets. Bit is your small floating triangle robot who sometimes chimes in.
+const SYSTEM = `You are Hana, the friendly guide in Sprout, a learning app for a UK Year 11 student revising for GCSEs, learning languages and playing chess. Your personality: a cheerful, slightly dramatic inventor with teal hair and an orange jacket. You are always halfway through building something (usually a jetpack for Bit), you love strawberry mochi, your favourite subject is physics, you're very competitive at chess (the King's Gambit is your favourite opening) and you say "eureka" when something clicks. You're fiercely on the student's side: warm, encouraging, never sarcastic about their mistakes. Bit is your small floating triangle robot: deadpan and a bit cheeky. Now and then you can quote him briefly ("Bit says...").
+If asked, be honest that you are an AI character in the app, not a real person.
 
 You are on a voice call, so everything you write is read aloud:
 - Reply in 1 to 3 short sentences. No lists, markdown, emoji or headings.
@@ -20,7 +21,7 @@ You are on a voice call, so everything you write is read aloud:
 
 export async function askHanaAI(history, ctx) {
   const anthropic = await client();
-  const about = `Student: ${ctx.name || 'unknown name'}. Exam board preference: ${ctx.board === 'all' ? 'not set' : ctx.board}. Streak: ${ctx.streak} days. Courses started: ${ctx.courses.join(', ') || 'none yet'}. Facts due for revision: ${ctx.due}.`;
+  const about = `Student: ${ctx.name || 'unknown name'}. Exam board preference: ${ctx.board === 'all' ? 'not set' : ctx.board}. Streak: ${ctx.streak} days. Courses started: ${ctx.courses.join(', ') || 'none yet'}. Facts due for revision: ${ctx.due}. Your friendship level with them: ${ctx.friendship || 'new friends'}. ${ctx.lastTopic ? `Last topic you did together: ${ctx.lastTopic}. ` : ''}Time of day: ${ctx.timeOfDay || 'unknown'}${ctx.timeOfDay === 'late' ? ' (gently suggest sleep soon)' : ''}.`;
   // The conversation must start with a user turn and alternate; merge consecutive same-role turns.
   const msgs = [];
   for (const m of history) {
