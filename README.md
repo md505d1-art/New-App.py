@@ -27,14 +27,23 @@ Android's in-app browser has no built-in speech, so the APK uses native plugins:
 
 ## Get it on your phone
 
-### Option 1: installable web app (iPhone and Android)
-1. One-time setup on GitHub: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
-2. Every push deploys to `https://md505d1-art.github.io/New-App.py/`
+**Scan with your phone's camera** (from your laptop screen):
+
+| iPhone | Android |
+|---|---|
+| <img src="assets/qr-iphone.svg" width="200" alt="QR code for the Sprout web app"> | <img src="assets/qr-android.svg" width="200" alt="QR code to download Sprout.apk"> |
+| Opens Sprout in Safari. Tap **Share → Add to Home Screen**. | Downloads **Sprout.apk**. Open it and tap **Install**. |
+
+The same codes, with step-by-step instructions, are on **Get-Sprout-on-your-phone.html**: download it from the **"Sprout – latest APK"** release and open it on your laptop, or open `get.html` on the live site, or tap **Put Sprout on your phone** in the app's Profile. To rebuild the page after changing a link: `pip install segno && python3 scripts/make-get-page.py`.
+
+### iPhone: installable web app
+1. One-time setup on GitHub (easiest on a laptop): **Settings → Pages → Build and deployment → Source: GitHub Actions**. Until this is on, the iPhone code leads to a "404" page.
+2. Every push then deploys to `https://md505d1-art.github.io/New-App.py/`
 3. Open it on your phone. iPhone (Safari): Share → **Add to Home Screen**. Android (Chrome): ⋮ → **Install app**.
 
-After the first visit everything is cached, including lessons, chess, fonts and images, so it works with no internet.
+After the first visit everything is cached, including lessons, chess, fonts and images, so it works with no internet. Apps added to the Home Screen keep their saved progress (Safari only clears data for websites you haven't visited in a while).
 
-### Option 2: Android APK
+### Android: APK
 Every push builds **Sprout.apk** and attaches it to the **"Sprout – latest APK"** release. Everything is bundled inside the APK, so it works offline from the first launch. It's a debug-signed build for personal use.
 
 ## Run it locally

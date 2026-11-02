@@ -766,3 +766,4 @@ body.bit-talking .mascot .bit-img, body.bit-talking .bit-solo img { animation: t
 .bond-card .bc-lv { font-size: 26px; }
 .hana-card .mascot { margin-left: 10px; } /* room for Bit, who floats off Hana's shoulder */
 .review.loading { position: relative; } .review.loading .cg-head { position: absolute; top: 0; left: 0; right: 0; }
+a.set-row { color: inherit; text-decoration: none; }

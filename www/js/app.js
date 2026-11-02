@@ -329,6 +329,7 @@ function profileScreen() {
         <div class="seg-tabs small"><button class="${S.aiOn ? 'on' : ''}" data-act="ai-toggle">${S.aiOn ? 'On' : 'Off'}</button><button data-act="ai-test">Test key</button></div></div>
       <div class="set-row"><span>Offline learning</span><b class="${navigator.onLine ? '' : 'off'}" id="offline-state">${offlineText()}</b></div>
       ${installPrompt ? '<button class="set-row" data-act="install"><span>Install Sprout</span><b>Add to home screen</b></button>' : ''}
+      ${window.Capacitor?.isNativePlatform?.() ? '' : '<a class="set-row" href="get.html" target="_blank" rel="noopener"><span>Put Sprout on your phone</span><b>📱 QR code</b></a>'}
       <button class="set-row danger" data-act="reset"><span>Reset all progress</span></button>
     </section>
   </div>`;

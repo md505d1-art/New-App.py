@@ -52,6 +52,9 @@ jobs:
           name: Sprout-apk
           path: Sprout.apk
 
+      - name: Add the "get it on your phone" page
+        run: cp www/get.html Get-Sprout-on-your-phone.html
+
       - name: Publish to the "Latest APK" release
         uses: softprops/action-gh-release@v2
         with:
@@ -61,6 +64,8 @@ jobs:
           make_latest: false
           body: |
             Debug build of Sprout from commit ${{ github.sha }}.
-            On your Android phone, download **Sprout.apk** below and open it.
-            You may need to allow "Install unknown apps" for your browser.
-          files: Sprout.apk
+            **Easiest:** on your laptop, download **Get-Sprout-on-your-phone.html** below, open it, and scan the QR code with your phone (iPhone or Android).
+            On an Android phone you can also download **Sprout.apk** below and open it. You may need to allow "Install unknown apps" for your browser.
+          files: |
+            Sprout.apk
+            Get-Sprout-on-your-phone.html
