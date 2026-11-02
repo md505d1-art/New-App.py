@@ -357,6 +357,8 @@ function profileScreen() {
       <div class="set-row"><span>Offline learning</span><b class="${navigator.onLine ? '' : 'off'}" id="offline-state">${offlineText()}</b></div>
       ${installPrompt ? '<button class="set-row" data-act="install"><span>Install Sprout</span><b>Add to home screen</b></button>' : ''}
       ${window.Capacitor?.isNativePlatform?.() ? '' : '<a class="set-row" href="get.html" target="_blank" rel="noopener"><span>Put Sprout on your phone</span><b>📱 QR code</b></a>'}
+      <button class="set-row" data-act="backup"><span>Back up progress<small class="muted block">Get a code that brings everything back on any phone</small></span><b>💾</b></button>
+      <button class="set-row" data-act="restore"><span>Restore from a backup</span><b>📥</b></button>
       <button class="set-row danger" data-act="reset"><span>Reset all progress</span></button>
     </section>
   </div>`;
@@ -500,6 +502,41 @@ function renderAvatarBuilder() {
       : `<button class="av-opt ${draftAv[avTab] === i ? 'on' : ''}" data-av="${avTab}:${i}">${avatarSVG({ ...draftAv, [avTab]: i }, 72)}<small>${v}</small></button>`).join('')}</div>
     <div class="avb-foot"><button class="primary-btn" data-act="av-save">Save character</button></div>
   </div>`;
+}
+
+/* ================= Backup and restore ================= */
+// Everything is saved on the phone. A backup code lets you move it to a new phone, or keep it safe
+// before removing the app from an iPhone Home Screen (which also deletes the app's saved data).
+function backupCode() {
+  const data = { ...S }; delete data.aiKey; delete data.aiOn;
+  return `SPROUT1:${btoa(unescape(encodeURIComponent(JSON.stringify(data))))}`;
+}
+function backupSheet() {
+  S.lastBackup = today(); save();
+  sheet(`<h2>Your backup code</h2><p class="muted">Save it somewhere safe, like the Notes app. To get everything back, go to Profile → Restore from a backup and paste it in.</p>
+    <textarea id="bk-code" class="bk-code" readonly>${esc(backupCode())}</textarea>
+    <button class="primary-btn" data-act="backup-share">${navigator.share ? 'Share or save' : 'Copy code'}</button><button class="text-btn" data-close>Done</button>`);
+}
+async function shareBackup() {
+  const code = backupCode();
+  try {
+    if (navigator.share) { await navigator.share({ title: 'Sprout backup', text: code }); return; }
+    await navigator.clipboard.writeText(code); toast('Backup code copied');
+  } catch (e) {
+    if (e?.name === 'AbortError') return;
+    const box = document.getElementById('bk-code'); box?.select(); toast('Select the code and copy it');
+  }
+}
+function restoreBackup(raw) {
+  try {
+    const code = raw.replace(/\s+/g, '');
+    if (!code.startsWith('SPROUT1:')) throw new Error('format');
+    const data = JSON.parse(decodeURIComponent(escape(atob(code.slice(8)))));
+    if (typeof data !== 'object' || typeof data.xp !== 'number' || typeof data.done !== 'object') throw new Error('format');
+    for (const k of Object.keys(S)) delete S[k];
+    Object.assign(S, data); save();
+    toast('Progress restored!'); setTimeout(() => location.reload(), 600);
+  } catch { toast('That code didn\'t work. Check you copied all of it.'); }
 }
 
 /* ================= Focus timer ================= */
@@ -692,6 +729,12 @@ document.addEventListener('click', (e) => {
     case 'preview-voice': hanaSay('Hi! I\'m Hana. This is how I sound. Ready to learn?', { force: true }); return;
     case 'game-review': if (lastGame) { const g = lastGame; showReview(g.record, { avatar: (sz) => myAvatar(sz), name: () => S.name || 'You', onBack: () => { openCourse = g.lessonId ? 'chess' : null; render(); } }); } return;
     case 'install': installPrompt?.prompt(); installPrompt = null; return;
+    case 'backup': return backupSheet();
+    case 'backup-share': return shareBackup();
+    case 'restore': return sheet(`<h2>Restore from a backup</h2><p class="muted">Paste your backup code below. This replaces the progress on this phone.</p>
+      <textarea id="bk-in" class="bk-code" placeholder="SPROUT1:…" autocomplete="off" autocapitalize="off" spellcheck="false"></textarea>
+      <button class="primary-btn" data-act="restore-go">Restore</button><button class="text-btn" data-close>Cancel</button>`);
+    case 'restore-go': return restoreBackup(document.getElementById('bk-in')?.value || '');
     case 'reset': return confirmSheet('Reset all progress?', 'reset-yes');
     case 'reset-yes': reset(); openCourse = null; closeSheet(); return render();
     case 'quit-yes': closeSheet(); pendingQuit?.(); pendingQuit = null; return render();

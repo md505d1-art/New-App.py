@@ -1,6 +1,6 @@
 // Offline support: everything the app needs is cached on install, so lessons, chess and
 // Hana all work with no connection.
-const CACHE = 'sprout-v12';
+const CACHE = 'sprout-v13';
 const SHELL = [
  "./",
  "css/fonts.css",
@@ -73,7 +73,7 @@ self.addEventListener('fetch', (e) => {
   e.respondWith((async () => {
     const cache = await caches.open(CACHE);
     try {
-      const res = await Promise.race([fetch(req), new Promise((_, no) => setTimeout(() => no(new Error('slow')), 4000))]);
+      const res = await Promise.race([fetch(req, { cache: 'no-cache' }), new Promise((_, no) => setTimeout(() => no(new Error('slow')), 4000))]);
       if (res.ok) cache.put(req, res.clone());
       return res;
     } catch {

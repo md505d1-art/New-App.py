@@ -40,8 +40,8 @@ const html = (size, { k = 1, bg = true, fg = true, r = 0 } = {}) => `<!doctype h
 const splash = (size, bg, tile) => `<body style="margin:0"><div style="width:${size}px;height:${size}px;display:grid;place-items:center;background:${bg}">
   <img src="${tile}" style="width:${Math.round(size * 0.24)}px;border-radius:22.5%;box-shadow:0 ${size / 80}px ${size / 25}px rgba(20,8,70,.45)"></div></body>`;
 const OUT = [ // file, size, options
-  ['www/icons/apple-touch-icon-v2.png', 180, {}], // iPhone home screen (iOS rounds the corners itself)
-  ['www/icons/icon-192-v2.png', 192, { r: 22.5 }], ['www/icons/icon-512-v2.png', 512, { r: 22.5 }],
+  // Home screen icons must be solid edge to edge: iOS rounds the corners itself and turns see-through pixels black.
+  ['www/icons/apple-touch-icon-v2.png', 180, {}], ['www/icons/icon-192-v2.png', 192, {}], ['www/icons/icon-512-v2.png', 512, {}],
   ['www/icons/icon-maskable-512-v2.png', 512, { k: 0.8 }], // Android may crop to a circle: keep everything in the safe zone
   ['assets/icon-only.png', 1024, {}], ['assets/icon-foreground.png', 1024, { bg: false, k: 0.62 }], ['assets/icon-background.png', 1024, { fg: false }],
 ];
@@ -56,4 +56,7 @@ for (const [file, bg] of [['assets/splash.png', 'radial-gradient(circle at 50% 4
   await p.setViewportSize({ width: 2732, height: 2732 }); await p.setContent(splash(2732, bg, tile)); await p.waitForTimeout(80);
   await p.screenshot({ path: file }); console.log('wrote', file);
 }
+// Older file names keep working (with the new picture) in case a phone still has an old copy of the page.
+for (const n of ['apple-touch-icon', 'icon-192', 'icon-512', 'icon-maskable-512']) fs.copyFileSync(new URL(`../www/icons/${n}-v2.png`, import.meta.url), new URL(`../www/icons/${n}.png`, import.meta.url));
+fs.copyFileSync(new URL('../www/icons/apple-touch-icon-v2.png', import.meta.url), new URL('../www/apple-touch-icon.png', import.meta.url));
 await b.close();
