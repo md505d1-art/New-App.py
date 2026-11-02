@@ -279,6 +279,7 @@ export function createTutor({ say, action }) {
     if (/\b(streak|xp|progress|how am i doing|my stats)\b/.test(t)) return stats();
     if (/\b(play chess|open chess|chess game)\b/.test(t)) { await hana('Let\'s play! Setting up the board.', { mood: 'cheer' }); return action('chess'); }
     if (/\b(revise|revision|smart revise)\b/.test(t) && !/teach/.test(t)) { await hana('Opening Smart revise for you!', { mood: 'cheer' }); return action('revise'); }
+    if (/\b(breathe|breathing|breather|calm down|mental reset|relax|meditate|meditation)\b/.test(t)) { await hana('Good idea. Let\'s breathe together. Opening the breathing space now.', { mood: 'happy' }); return action('breathe'); }
     const chat = smallTalk(t);
     if (chat) { await lines(chat.lines); if (chat.action) action(chat.action); return; }
     if (/\b(quiz|test) me\b/.test(t)) return quizMe(text);
@@ -304,7 +305,7 @@ export function createTutor({ say, action }) {
     const useAI = S.aiOn && S.aiKey && navigator.onLine;
     // Built-in commands (ending the call, lessons in progress, quizzes) are always handled locally.
     const t = norm(text);
-    const command = /\b(bye|goodbye|good ?night|end (the )?call|hang up|repeat|pardon|play chess|open chess|smart revise)\b/.test(t) || (mode === 'teach' && session);
+    const command = /\b(bye|goodbye|good ?night|end (the )?call|hang up|repeat|pardon|play chess|open chess|smart revise|breathe|breathing|breather|mental reset)\b/.test(t) || (mode === 'teach' && session);
     if (useAI && !command) {
       try { await aiReply(text); if (up) await hana(levelUpLine(up), { mood: 'cheer' }); return; } catch (e) {
         await bit(e?.message === 'key' ? 'Beep! Your API key did not work. Check it in Profile settings.' : 'Bzzt. Online brain unreachable. Switching to offline mode.');

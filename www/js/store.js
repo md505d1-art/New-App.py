@@ -26,6 +26,7 @@ function load() {
   if (['learn', 'habits', 'profile'].includes(s.tab)) s.tab = { learn: 'learn', habits: 'today', profile: 'me' }[s.tab];
   for (const k of Object.keys(s.done)) if (s.done[k] === true) s.done[k] = 1;
   s.timeByDay = s.timeByDay || {};
+  s.lib = 'all'; // the Explore filter (e.g. "School" picked on day one) shouldn't hide other courses forever
   if (['today', 'learn', 'garden', 'me'].includes(s.tab)) s.tab = { today: 'home', learn: 'explore', garden: 'progress', me: 'profile' }[s.tab];
   return s;
 }

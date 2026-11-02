@@ -1,6 +1,6 @@
 // Offline support: everything the app needs is cached on install, so lessons, chess and
 // Hana all work with no connection.
-const CACHE = 'sprout-v10';
+const CACHE = 'sprout-v11';
 const SHELL = [
  "./",
  "css/fonts.css",
@@ -9,10 +9,10 @@ const SHELL = [
  "fonts/dmmono-latin.woff2",
  "fonts/plusjakartasans-latin-ext.woff2",
  "fonts/plusjakartasans-latin.woff2",
- "icons/apple-touch-icon.png",
- "icons/icon-192.png",
- "icons/icon-512.png",
- "icons/icon-maskable-512.png",
+ "icons/apple-touch-icon-v2.png",
+ "icons/icon-192-v2.png",
+ "icons/icon-512-v2.png",
+ "icons/icon-maskable-512-v2.png",
  "img/bit.webp",
  "img/hana-annoyed.webp",
  "img/hana-full.webp",
@@ -34,6 +34,7 @@ const SHELL = [
  "js/app.js",
  "js/art.js",
  "js/avatar.js",
+ "js/breathe.js",
  "js/call.js",
  "js/chess-analysis.js",
  "js/chess-sound.js",

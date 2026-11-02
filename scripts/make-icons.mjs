@@ -40,9 +40,9 @@ const html = (size, { k = 1, bg = true, fg = true, r = 0 } = {}) => `<!doctype h
 const splash = (size, bg, tile) => `<body style="margin:0"><div style="width:${size}px;height:${size}px;display:grid;place-items:center;background:${bg}">
   <img src="${tile}" style="width:${Math.round(size * 0.24)}px;border-radius:22.5%;box-shadow:0 ${size / 80}px ${size / 25}px rgba(20,8,70,.45)"></div></body>`;
 const OUT = [ // file, size, options
-  ['www/icons/apple-touch-icon.png', 180, {}], // iPhone home screen (iOS rounds the corners itself)
-  ['www/icons/icon-192.png', 192, { r: 22.5 }], ['www/icons/icon-512.png', 512, { r: 22.5 }],
-  ['www/icons/icon-maskable-512.png', 512, { k: 0.8 }], // Android may crop to a circle: keep everything in the safe zone
+  ['www/icons/apple-touch-icon-v2.png', 180, {}], // iPhone home screen (iOS rounds the corners itself)
+  ['www/icons/icon-192-v2.png', 192, { r: 22.5 }], ['www/icons/icon-512-v2.png', 512, { r: 22.5 }],
+  ['www/icons/icon-maskable-512-v2.png', 512, { k: 0.8 }], // Android may crop to a circle: keep everything in the safe zone
   ['assets/icon-only.png', 1024, {}], ['assets/icon-foreground.png', 1024, { bg: false, k: 0.62 }], ['assets/icon-background.png', 1024, { fg: false }],
 ];
 const b = await chromium.launch(); const p = await b.newPage();

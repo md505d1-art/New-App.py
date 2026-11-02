@@ -159,6 +159,8 @@ export function homeThought(n = 0) {
   else if (part === 'morning') pool.push(`Morning${name}! Brains are fresh before lunch. Perfect for something tricky.`);
   else if (part === 'evening') pool.push('Evening study session? I\'ll make the hot chocolate. Well, I\'ll imagine it.');
   if (h.lastTopic) pool.push(`Last time we did ${h.lastTopic}. Want to carry on?`);
+  const studied = Math.round((S.timeByDay?.[today()] || 0) / 60);
+  if (studied >= 25) pool.unshift(`You've studied for ${studied} minutes today! Brains love breaks. Tap 🌿 Breathe for a one-minute reset.`);
   pool.push(`Fun fact: ${factOfDay()}`);
   pool.push(todaysTinker());
   pool.push(`Tip: ${daily(STUDY_TIPS, 3)}`);
@@ -216,8 +218,8 @@ export function smallTalk(t) {
   if (has(/how are you|hows it going|how are things|you ok|how was your day|what have you been up to|what are you doing|what were you doing/)) return R([H(`I'm great! ${todaysTinker()} How about you?`)]);
   if (has(/\b(im|i am) (good|great|fine|ok|okay|alright|happy|excited)\b/)) return R([H('Love that! Shall we put that energy into something? Try "quiz me" or "teach me".', 'cheer')]);
   if (has(/\b(failed|fail|bad (grade|mark|result)|did badly|messed up)\b/)) return R([H('Oh, that stings, I know. But one result doesn\'t decide who you are. Shall we work out what to fix, together?', 'think'), B('Beep. Hana failed her first robot test. Now she has me. Look how that turned out.'), H('...Perfectly, Bit. It turned out perfectly.')]);
-  if (has(/\b(exam|exams|mocks?|test tomorrow)\b/) && has(/\b(scared|nervous|stressed|worried|anxious|panic|panicking|scary)\b/)) return R([H('Exams can feel huge. Let\'s shrink them: one topic, ten minutes, then a break. You know more than you think.', 'think'), H('Want me to quiz you on something to prove it? Say "quiz me on" and a subject.')]);
-  if (has(/\b(im|i am|feeling|feel) (tired|sad|stressed|nervous|worried|anxious|down|rubbish|awful|overwhelmed)\b/)) return R([H('That\'s okay. Thanks for telling me. Let\'s do something small together, even five minutes counts. Or we can just chat for a bit.', 'think')]);
+  if (has(/\b(exam|exams|mocks?|test tomorrow)\b/) && has(/\b(scared|nervous|stressed|worried|anxious|panic|panicking|scary)\b/)) return R([H('Exams can feel huge. Let\'s shrink them: one topic, ten minutes, then a break. You know more than you think.', 'think'), H('If your head feels busy, say "breathe" and we\'ll do a one-minute breathing reset first. Or say "quiz me on" and a subject.')]);
+  if (has(/\b(im|i am|feeling|feel) (tired|sad|stressed|nervous|worried|anxious|down|rubbish|awful|overwhelmed|panicking)\b/)) return R([H('That\'s okay. Thanks for telling me. Want to take a minute to breathe with me? Just say "breathe". Or we can do something small together, or just chat.', 'think')]);
   if (has(/\b(i give up|i cant do (this|it)|im (stupid|dumb|bad at)|i am (stupid|dumb|bad at)|im rubbish at)\b/)) return R([H(`Hey, ${name}, you're not stupid. Getting things wrong is literally how brains learn. Every wrong answer today is a right one tomorrow.`, 'think'), H('Let\'s try one small thing together. Say "quiz me" and I\'ll go easy.', 'happy')]);
   if (has(/\b(motivate me|motivation|inspire me|encourage me)\b/)) return R([H(pick(['Future you is going to be so glad you started today. Let\'s give them something to thank you for!', 'You don\'t have to be great to start, but you have to start to be great. Okay, that one\'s on a poster, but it\'s true!', 'One lesson. That\'s all. I bet you do two.']), 'cheer')]);
   if (has(/\b(im bored|i am bored|boring)\b/)) return R([H('Bored? Let\'s make it a game. Three quick questions, Bit keeps score.', 'cheer'), B('Beep. Scoreboard online.'), H('Say "quiz me" and we\'re on!')]);

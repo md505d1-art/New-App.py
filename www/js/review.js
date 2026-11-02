@@ -26,7 +26,7 @@ export async function showReview(rec, opts) {
       rec.evals[i] = { score: r.score, best: r.best }; progress(++done, missing.length);
     }
   }
-  rec.moves.forEach((m, i) => { if (!rec.classes[i]) rec.classes[i] = classifyMove({ before: rec.evals[i].score, after: rec.evals[i + 1].score, san: m.san, bestSan: rec.evals[i].best?.san }); });
+  rec.moves.forEach((m, i) => { if (!rec.classes[i]) rec.classes[i] = classifyMove({ before: rec.evals[i].score, after: rec.evals[i + 1].score, san: m.san, bestSan: rec.evals[i].best?.san, fen: R.positions[i], move: m }); });
   R.ply = 0; render(true);
 }
 export const reviewActive = () => !!R;
@@ -76,7 +76,7 @@ function boardHTML() {
     const coords = `${ci === 0 ? `<em class="rk">${8 - r}</em>` : ''}${ri === 7 ? `<em class="fl">${'abcdefgh'[f]}</em>` : ''}`;
     html += `<div class="csq ${(f + r) % 2 ? 'd' : 'l'}${hl}">${coords}${sq ? pieceImg(sq.color + sq.type) : ''}${badge}</div>`;
   }
-  const alt = ply > 0 && !['best', 'book'].includes(cl) ? rec.evals[ply - 1].best : null;
+  const alt = ply > 0 && !['best', 'book', 'brilliant'].includes(cl) ? rec.evals[ply - 1].best : null;
   const ws = whiteScore(rec.evals[ply].score, ply, rec.startTurn);
   return `<div class="cg-boardrow"><div class="evalbar ${flip ? 'flip' : ''}"><i style="height:${whiteBar(ws)}%"></i><span class="${ws >= 0 ? 'w' : 'b'}">${evalText(ws)}</span></div>
     <div class="cboard-wrap"><div class="cboard">${html}</div><svg class="arrows" viewBox="0 0 8 8">${alt ? arrowSVG(alt.from, alt.to, 'rgba(129,182,76,.9)', flip) : ''}</svg></div></div>`;
@@ -88,9 +88,9 @@ function explainHTML() {
   const m = rec.moves[ply - 1]; const cl = rec.classes[ply - 1]; const info = CLASS[cl]; const best = rec.evals[ply - 1].best;
   const who = m.color === rec.side ? 'You' : 'Hana';
   const an = /^[aeiou]/i.test(info.label) ? 'an' : 'a';
-  const tail = cl === 'best' ? 'That was the best move.' : best ? `The best move was <b class="mono">${esc(best.san)}</b> (green arrow).` : '';
-  return `<div class="rv-explain">${mascot(['mistake', 'blunder'].includes(cl) ? 'sad' : cl === 'inaccuracy' ? 'think' : 'cheer', 52, { bit: false })}
-    <p><span class="cls-pill" style="--k:${info.color}">${info.sym} ${info.label}</span> ${who} played <b class="mono">${esc(m.san)}</b>${cl === 'best' ? '' : `, ${an} ${info.label.toLowerCase()}`}. ${tail}</p></div>`;
+  const tail = cl === 'brilliant' ? 'A brilliant sacrifice: it gives up material, but the position is great.' : cl === 'best' ? 'That was the best move.' : best ? `The best move was <b class="mono">${esc(best.san)}</b> (green arrow).` : '';
+  return `<div class="rv-explain ${cl === 'brilliant' ? 'is-brilliant' : ''}">${mascot(['mistake', 'blunder'].includes(cl) ? 'sad' : cl === 'inaccuracy' ? 'think' : 'cheer', 52, { bit: false })}
+    <p><span class="cls-pill" style="--k:${info.color}">${info.sym} ${info.label}</span> ${who} played <b class="mono">${esc(m.san)}</b>${cl === 'best' || cl === 'brilliant' ? '' : `, ${an} ${info.label.toLowerCase()}`}. ${tail}</p></div>`;
 }
 
 function movesHTML() {

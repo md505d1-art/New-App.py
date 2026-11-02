@@ -27,7 +27,7 @@ export function startGame(opts, callbacks) {
   api = callbacks; engines();
   const c = new Chess(opts.fen || undefined);
   G = { c, startFen: c.fen(), startTurn: c.turn(), side: opts.side || 'w', level: opts.level || 1, title: opts.title || 'Free play', idea: opts.idea || '',
-    prefix: opts.prefix || [], lessonId: opts.lessonId || null, moves: [], evals: [], classes: [], gen: 0, pending: new Set(),
+    prefix: opts.prefix || [], lessonId: opts.lessonId || null, moves: [], evals: [], classes: [], fens: [], gen: 0, pending: new Set(),
     sel: null, targets: [], last: null, hint: null, thinking: false, over: null, flip: false, promo: null,
     coach: { mood: 'happy', html: opts.intro || 'Good luck!' }, started: Date.now() };
   chessSound.start();
@@ -37,12 +37,17 @@ export function startGame(opts, callbacks) {
 }
 export const gameActive = () => !!G;
 
-/* ---------- rendering ---------- */
-function squaresHTML() {
+/* ---------- rendering ----------
+   The screen is built once per game; after that only what changed is updated (squares, bars, bubble,
+   buttons). Rebuilding everything on each tap made pieces flicker on iPhone and reset the scroll. */
+const setHTML = (el, html) => { if (!el || el._h === html) return false; el._h = html; el.innerHTML = html; return true; };
+const $ = (id) => document.getElementById(id);
+
+function squareList() {
   const { c, sel, targets, last, hint } = G;
-  const b = c.board(); const flip = (G.side === 'b') !== G.flip;
+  const b = c.board(); const flip = flipped();
   const kingSq = c.inCheck() ? findKing(b, c.turn()) : null;
-  let html = '';
+  const out = [];
   for (let ri = 0; ri < 8; ri++) for (let ci = 0; ci < 8; ci++) {
     const r = flip ? 7 - ri : ri; const f = flip ? 7 - ci : ci;
     const sq = b[r][f]; const name = 'abcdefgh'[f] + (8 - r);
@@ -53,9 +58,9 @@ function squaresHTML() {
     if (kingSq === name) cls.push('chk');
     const t = targets.includes(name) ? `<i class="${sq ? 'ring' : 'dot'}"></i>` : '';
     const coords = `${ci === 0 ? `<em class="rk">${8 - r}</em>` : ''}${ri === 7 ? `<em class="fl">${'abcdefgh'[f]}</em>` : ''}`;
-    html += `<div class="${cls.join(' ')}" data-sq="${name}">${coords}${sq ? pieceImg(sq.color + sq.type) : ''}${t}</div>`;
+    out.push({ name, cls: cls.join(' '), html: `${coords}${sq ? pieceImg(sq.color + sq.type) : ''}${t}` });
   }
-  return html;
+  return out;
 }
 function findKing(b, color) {
   for (let r = 0; r < 8; r++) for (let f = 0; f < 8; f++) { const p = b[r][f]; if (p && p.type === 'k' && p.color === color) return 'abcdefgh'[f] + (8 - r); }
@@ -63,23 +68,27 @@ function findKing(b, color) {
 }
 const flipped = () => (G.side === 'b') !== G.flip;
 
-function playerBar(color) {
+function patchBar(el, color) {
+  if (!el) return;
   const isMe = color === G.side;
   const m = material(G.c.board());
   const took = m.took[color]; const adv = color === 'w' ? m.diff : -m.diff;
   const thinking = !isMe && G.thinking;
-  return `<div class="pbar ${G.c.turn() === color && !G.over ? 'to-move' : ''}">
-    <span class="pb-av ${isMe ? 'me' : 'ai'}">${isMe ? api.avatar(40) : mascot('happy', 40, { bit: false })}</span>
-    <span class="pb-name"><b>${isMe ? esc(api.name()) : 'Hana'}</b><small>${isMe ? (color === 'w' ? 'White' : 'Black') : `AI · ${LEVEL_NAME[G.level]}`}${thinking ? ' · thinking<span class="dots3"><i>.</i><i>.</i><i>.</i></span>' : ''}</small></span>
-    <span class="pb-took">${took.map((p) => pieceImg(p, 'tk')).join('')}${adv > 0 ? `<em>+${adv}</em>` : ''}</span>
-  </div>`;
+  el.classList.toggle('to-move', G.c.turn() === color && !G.over);
+  setHTML(el.querySelector('.pb-av'), isMe ? api.avatar(40) : mascot('happy', 40, { bit: false }));
+  el.querySelector('.pb-av').className = `pb-av ${isMe ? 'me' : 'ai'}`;
+  setHTML(el.querySelector('.pb-name'), `<b>${isMe ? esc(api.name()) : 'Hana'}</b><small>${isMe ? (color === 'w' ? 'White' : 'Black') : `AI · ${LEVEL_NAME[G.level]}`}${thinking ? ' · thinking<span class="dots3"><i>.</i><i>.</i><i>.</i></span>' : ''}</small>`);
+  setHTML(el.querySelector('.pb-took'), `${took.map((p) => pieceImg(p, 'tk')).join('')}${adv > 0 ? `<em>+${adv}</em>` : ''}`);
 }
+const barShell = (id) => `<div class="pbar" id="${id}"><span class="pb-av"></span><span class="pb-name"></span><span class="pb-took"></span></div>`;
 
-function evalBarHTML() {
+function patchEval() {
+  const el = $('evalbar'); if (!el) return;
   const k = latestEvalIndex();
   const ws = k < 0 ? 0 : whiteScore(G.evals[k].score, k, G.startTurn);
-  const pct = whiteBar(ws);
-  return `<div class="evalbar ${flipped() ? 'flip' : ''}" id="evalbar"><i style="height:${pct}%"></i><span class="${ws >= 0 ? 'w' : 'b'}">${evalText(ws)}</span></div>`;
+  el.classList.toggle('flip', flipped());
+  el.firstElementChild.style.height = `${whiteBar(ws)}%`;
+  const label = el.lastElementChild; label.className = ws >= 0 ? 'w' : 'b'; label.textContent = evalText(ws);
 }
 function latestEvalIndex() { for (let i = G.moves.length; i >= 0; i--) if (G.evals[i]) return i; return -1; }
 
@@ -95,43 +104,55 @@ function movesHTML() {
   return html || '<span class="mn">Starting position</span>';
 }
 
-function coachHTML() {
-  return `${mascot(G.coach.mood, 58)}<div class="cg-say">${G.coach.html}</div>`;
+function patchCoach() {
+  setHTML($('cg-coach-m'), mascot(G.coach.mood, 58));
+  const say = $('cg-say');
+  if (setHTML(say, G.coach.html)) { say.style.animation = 'none'; void say.offsetWidth; say.style.animation = ''; } // pop only when the words change
+}
+
+let mounted = null; // the game the current screen belongs to
+function mount() {
+  mounted = G;
+  document.getElementById('app').innerHTML = `<div class="cgame">
+    <header class="cg-head"><button class="nav-ic" data-g="quit" aria-label="Leave game">✕</button>
+      <div class="cg-title"><b>${esc(G.title)}</b><small>vs Hana · ${LEVEL_NAME[G.level]}</small></div><span class="cg-seeds" id="cg-seeds"></span></header>
+    <div class="cg-main" id="cg-main">
+      ${barShell('pb-top')}
+      <div class="cg-boardrow"><div class="evalbar" id="evalbar"><i></i><span></span></div>
+        <div class="cboard-wrap"><div class="cboard" id="cboard">${'<div class="csq"></div>'.repeat(64)}</div>
+          <svg class="arrows" id="cg-arrows" viewBox="0 0 8 8" aria-hidden="true"></svg><div id="cg-promo"></div></div></div>
+      ${barShell('pb-bottom')}
+      <div class="cg-coach"><span id="cg-coach-m"></span><div class="cg-say" id="cg-say"></div></div>
+      <div class="cg-moves" id="cg-moves"></div>
+    </div>
+    <footer class="cg-foot">
+      <button class="gbtn" data-g="hint" id="g-hint"><span>💡</span>Hint<small>🌱 10</small></button>
+      <button class="gbtn" data-g="undo" id="g-undo"><span>↩️</span>Undo<small>🌱 10</small></button>
+      <button class="gbtn" data-g="flip"><span>🔄</span>Flip<small>&nbsp;</small></button>
+      <button class="gbtn" data-g="resign" id="g-resign"><span>🏳️</span>Resign<small>&nbsp;</small></button>
+    </footer>
+  </div>`;
 }
 
 function draw() {
-  const app = document.getElementById('app');
+  if (mounted !== G || !$('cboard')) mount();
+  const cells = $('cboard').children;
+  squareList().forEach((d, i) => { const el = cells[i]; if (el.className !== d.cls) el.className = d.cls; if (el.dataset.sq !== d.name) el.dataset.sq = d.name; setHTML(el, d.html); });
+  const top = flipped() ? 'w' : 'b';
+  patchBar($('pb-top'), top); patchBar($('pb-bottom'), top === 'w' ? 'b' : 'w');
+  patchEval();
+  setHTML($('cg-arrows'), G.hint ? arrowSVG(G.hint.from, G.hint.to, 'rgba(255,170,0,.85)', flipped()) : '');
+  setHTML($('cg-promo'), G.promo ? promoHTML() : '');
+  patchCoach();
+  const mv = $('cg-moves'); if (setHTML(mv, movesHTML())) mv.scrollLeft = mv.scrollWidth;
+  const seeds = $('cg-seeds'); const st = `🌱 ${api.seeds()}`; if (seeds.textContent !== st) seeds.textContent = st;
   const myTurn = !G.over && !G.thinking && G.c.turn() === G.side;
-  const top = flipped() ? 'w' : 'b'; const bottom = top === 'w' ? 'b' : 'w';
-  app.innerHTML = `<div class="cgame">
-    <header class="cg-head"><button class="nav-ic" data-g="quit" aria-label="Leave game">✕</button>
-      <div class="cg-title"><b>${esc(G.title)}</b><small>vs Hana · ${LEVEL_NAME[G.level]}</small></div><span class="cg-seeds">🌱 ${api.seeds()}</span></header>
-    <div class="cg-main">
-      ${playerBar(top)}
-      <div class="cg-boardrow">${evalBarHTML()}
-        <div class="cboard-wrap"><div class="cboard" id="cboard">${squaresHTML()}</div>
-          <svg class="arrows" viewBox="0 0 8 8" aria-hidden="true">${G.hint ? arrowSVG(G.hint.from, G.hint.to, 'rgba(255,170,0,.85)', flipped()) : ''}</svg>
-          ${G.promo ? promoHTML() : ''}</div></div>
-      ${playerBar(bottom)}
-      <div class="cg-coach" id="cg-coach">${coachHTML()}</div>
-      <div class="cg-moves" id="cg-moves">${movesHTML()}</div>
-    </div>
-    <footer class="cg-foot">
-      <button class="gbtn" data-g="hint" ${myTurn ? '' : 'disabled'}><span>💡</span>Hint<small>🌱 10</small></button>
-      <button class="gbtn" data-g="undo" ${myTurn && G.moves.length >= 2 ? '' : 'disabled'}><span>↩️</span>Undo<small>🌱 10</small></button>
-      <button class="gbtn" data-g="flip"><span>🔄</span>Flip<small>&nbsp;</small></button>
-      <button class="gbtn" data-g="resign" ${G.over ? 'disabled' : ''}><span>🏳️</span>Resign<small>&nbsp;</small></button>
-    </footer>
-  </div>`;
-  const mv = document.getElementById('cg-moves'); if (mv) mv.scrollLeft = mv.scrollWidth;
+  $('g-hint').disabled = !myTurn; $('g-undo').disabled = !(myTurn && G.moves.length >= 2); $('g-resign').disabled = !!G.over;
   if (G.anim) { slide(G.anim); G.anim = null; }
 }
 
-function refreshSide() {
-  const mv = document.getElementById('cg-moves'); if (mv) { mv.innerHTML = movesHTML(); mv.scrollLeft = mv.scrollWidth; }
-  const eb = document.getElementById('evalbar'); if (eb) eb.outerHTML = evalBarHTML();
-  const co = document.getElementById('cg-coach'); if (co) co.innerHTML = coachHTML();
-}
+// Ratings and the eval bar arrive from the analysis worker after the move.
+function refreshSide() { if (G && mounted === G && $('cboard')) draw(); }
 
 function promoHTML() {
   const col = G.side;
@@ -181,7 +202,7 @@ async function aiTurn() {
 }
 
 function queueEval(k) {
-  const game = G; const gen = G.gen; const fen = G.c.fen();
+  const game = G; const gen = G.gen; const fen = G.c.fen(); G.fens[k] = fen;
   const job = engines().analyst.ask({ type: 'eval', fen, ms: 450 }).then((r) => {
     game.pending.delete(job);
     if (G !== game || gen !== G.gen || !r) return;
@@ -195,7 +216,7 @@ function queueEval(k) {
 function classify(i) {
   if (i < 0 || !G.moves[i] || !G.evals[i] || !G.evals[i + 1] || G.classes[i]) return;
   const m = G.moves[i];
-  G.classes[i] = classifyMove({ before: G.evals[i].score, after: G.evals[i + 1].score, san: m.san, bestSan: G.evals[i].best?.san });
+  G.classes[i] = classifyMove({ before: G.evals[i].score, after: G.evals[i + 1].score, san: m.san, bestSan: G.evals[i].best?.san, fen: G.fens[i], move: m });
   if (m.color === G.side && i === lastIndexOf(G.side)) feedback(i);
 }
 const lastIndexOf = (color) => { for (let i = G.moves.length - 1; i >= 0; i--) if (G.moves[i].color === color) return i; return -1; };
@@ -205,6 +226,7 @@ function feedback(i) {
   const tag = `<span class="cls-pill" style="--k:${info.color}">${info.sym} ${info.label}</span>`;
   const better = best && best !== san ? ` <b class="mono">${esc(best)}</b> was ${cl === 'blunder' ? 'much ' : ''}better.` : '';
   const lines = {
+    brilliant: ['cheer', `${tag} <b class="mono">${esc(san)}</b> is a brilliant sacrifice! Eureka!`],
     best: ['cheer', `${tag} <b class="mono">${esc(san)}</b> is the top engine move!`],
     excellent: ['happy', `${tag} <b class="mono">${esc(san)}</b> is a strong move.`],
     good: ['happy', `${tag} <b class="mono">${esc(san)}</b> is fine.${better}`],
@@ -212,7 +234,8 @@ function feedback(i) {
     mistake: ['sad', `${tag} <b class="mono">${esc(san)}</b> gives away some advantage.${better}`],
     blunder: ['sad', `${tag} Oh no, <b class="mono">${esc(san)}</b> loses material or the game.${better}`],
   }[cl];
-  if (!G.thinking || cl === 'mistake' || cl === 'blunder' || cl === 'best') say(lines[0], lines[1]);
+  if (!G.thinking || cl === 'mistake' || cl === 'blunder' || cl === 'best' || cl === 'brilliant') say(lines[0], lines[1]);
+  if (cl === 'brilliant') { chessSound.notify?.(); hanaSay('Brilliant! What a sacrifice!'); bitSay('Boop boop! Brilliant move detected!'); }
   if (cl === 'best' && Math.random() < 0.5) bitSay('Boop! Best move!');
   if (cl === 'mistake') hanaSay(`That's a mistake. ${best ? `${best} was better.` : ''}`);
   if (cl === 'blunder') hanaSay(`Oh no, a blunder! ${best ? `${best} was much better.` : ''}`);
@@ -309,7 +332,7 @@ document.addEventListener('click', (e) => {
   if (a === 'undo') {
     if (!api.spendSeeds(10)) return;
     G.c.undo(); G.c.undo(); G.moves.length -= 2; G.gen++;
-    G.evals.length = G.moves.length + 1; G.classes.length = G.moves.length;
+    G.evals.length = G.moves.length + 1; G.classes.length = G.moves.length; G.fens.length = G.moves.length + 1;
     G.last = null; G.sel = null; G.targets = []; G.hint = null;
     say('happy', 'Okay, take another look.'); return draw();
   }

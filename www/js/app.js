@@ -12,6 +12,7 @@ import { badge, icon, thumb, medal, sun, plant, col } from './art.js';
 import { S, save, reset, addXP, addTime, streakAlive, today, dayOffset, esc, sfx, burst, countUp, toast } from './store.js';
 import { startLesson, lessonActive } from './lesson.js';
 import { startGame, gameActive } from './game.js';
+import { startBreathe, breatheActive } from './breathe.js';
 
 const $app = document.getElementById('app');
 let openCourse = null;
@@ -141,7 +142,7 @@ function homeScreen() {
       <button data-act="call"><span>📞</span>Call Hana</button>
       <button data-act="revise"><span>🧠</span>Revise</button>
       <button data-open="chess"><span>♞</span>Chess</button>
-      <button data-tab="explore"><span>🔎</span>Explore</button>
+      <button data-act="breathe"><span>🌿</span>Breathe</button>
     </div>
 
     ${reviewCard()}
@@ -299,7 +300,7 @@ function profileScreen() {
   return `<div class="profile">
     <section class="profile-card rise"><div class="pc-av">${myAvatar(108)}</div>
       <div class="pc-text"><h1>${esc(S.name || 'Your profile')}</h1><p>${plural(started().length, 'course')} · ${plural(Object.keys(S.done).length, 'lesson')}</p>
-        <div class="chips"><span>🔥 ${streakAlive() ? S.streak : 0} day streak</span><span>⚡ ${S.xp} XP</span><span>🌱 ${S.seeds} seeds</span></div>
+        <div class="chips"><span>🔥 ${streakAlive() ? S.streak : 0} day streak</span><span>⚡ ${S.xp} XP</span><span>🌱 ${S.seeds} seeds</span>${S.calm?.mins >= 1 ? `<span>🌿 ${Math.round(S.calm.mins)} calm min</span>` : ''}</div>
         <button class="edit-av" data-act="avatar">✏️ Edit your character</button></div></section>
     ${(() => { const b = bond(); return `<div class="sec-row rise" style="--i:1"><h2>You and Hana</h2></div>
     <section class="list-card bond-card rise" style="--i:1">${mascot('happy', 64, { bit: false })}<div class="bc-txt"><b>${b.emoji} ${b.name}</b><small>Friendship level ${b.level} · ${b.next ? `${b.next.at - b.points} points to ${b.next.name}` : 'Top level!'}</small>
@@ -390,6 +391,13 @@ function begin(courseId, lessonId) {
 }
 function nextAfter(c, id) { const ls = lessonsOf(c); const i = ls.findIndex((x) => x.id === id); return ls[i + 1] || null; }
 
+// Time for a mental reset? After 25+ minutes of learning today with no breather in the last half hour.
+function needsBreak() {
+  const studied = (S.timeByDay[today()] || 0) / 60; const sinceCalm = S.calm?.last ? (Date.now() - S.calm.last) / 60000 : Infinity;
+  return studied >= 25 && sinceCalm > 30;
+}
+const breatherBtn = (label) => `<button class="primary-btn ghost-btn calm-btn" data-act="breathe">🌿 ${label}</button>`;
+
 function lessonDone(c, l, r) {
   const first = !S.done[l.id];
   S.done[l.id] = Math.max(starsOf(l.id), r.stars);
@@ -401,7 +409,9 @@ function lessonDone(c, l, r) {
   const nx = nextAfter(c, l.id);
   results({ title: r.stars === 3 ? 'Perfect lesson!' : 'Lesson complete!', sub: esc(l.title), stars: r.stars, color: c.color,
     stats: [['⚡', 'XP earned', xp, ''], ['🎯', 'First try', r.accuracy, '%'], ['⏱', 'Time', Math.max(1, Math.round(r.secs / 60)), ' min']],
+    note: r.accuracy < 60 ? '<p class="calm-note">That one was tough. A one-minute breather can help it sink in.</p>' : needsBreak() ? `<p class="calm-note">You've been learning for ${Math.round((S.timeByDay[today()] || 0) / 60)} minutes today. Time for a quick mental reset?</p>` : '',
     buttons: [nx ? `<button class="primary-btn" data-start-next="${c.id}|${nx.id}">Next lesson ${arrow}</button>` : '',
+      r.accuracy < 60 || needsBreak() ? breatherBtn('Take a breather') : '',
       `<button class="text-btn" data-act="to-course" data-course="${c.id}">Back to ${esc(c.name)}</button>`] });
 }
 
@@ -447,6 +457,7 @@ function gameDone(r) {
       r.lessonId && !pass ? `<button class="primary-btn ghost-btn" data-start-next="chess|${r.lessonId}">Try again ${arrow}</button>` : '',
       r.lessonId && pass && nx ? `<button class="primary-btn ghost-btn" data-start-next="chess|${nx.id}">Next game ${arrow}</button>` : '',
       !r.lessonId ? `<button class="primary-btn ghost-btn" data-free="${r.level}">Play again ${arrow}</button>` : '',
+      r.result === 'loss' ? breatherBtn('Shake it off: 1-minute breather') : '',
       `<button class="text-btn" data-act="${r.lessonId ? 'to-course' : 'home'}" data-course="chess">Continue</button>`] });
 }
 
@@ -471,6 +482,7 @@ function openCall() {
     onLessonDone: ({ c, l, stars }) => { const first = !S.done[l.id]; S.done[l.id] = Math.max(starsOf(l.id), stars); learnLesson(c, l); S.seeds += first ? 5 : 1; addXP(10 + stars * 2); addBond(3); },
     chess: () => { S.tab = 'explore'; openCourse = 'chess'; render(); },
     revise: () => startRevise(),
+    breathe: () => startBreathe({ onDone: () => render() }),
   });
 }
 
@@ -529,7 +541,7 @@ if (window.matchMedia?.('(hover: hover)').matches) {
 }
 // Hana "talks": her picture bobs and glows while she speaks anywhere in the app.
 onSpeaking((who, on) => document.body.classList.toggle(`${who}-talking`, on));
-voicesReady.then(() => { if (S.tab === 'profile' && !openCourse && !openAvatar && !callActive() && !lessonActive() && !gameActive()) render(); });
+voicesReady.then(() => { if (S.tab === 'profile' && !openCourse && !openAvatar && !callActive() && !lessonActive() && !gameActive() && !breatheActive()) render(); });
 
 /* ================= Events ================= */
 let installPrompt = null;
@@ -603,6 +615,7 @@ document.addEventListener('click', (e) => {
     case 'av-cancel': openAvatar = false; return render();
     case 'revise': return startRevise();
     case 'call': return openCall();
+    case 'breathe': closeSheet(); return startBreathe({ onDone: () => render(), why: needsBreak() ? `You've been learning for ${Math.round((S.timeByDay[today()] || 0) / 60)} minutes today. Nice work. Let's reset.` : '' });
     case 'next-thought': { thought++; const el = document.getElementById('hc-text'); if (el) { const line = hanaLine(); typeInto(el, line); hanaSay(line); } return; }
     case 'handsfree': S.handsFree = !S.handsFree; save(); return render();
     case 'preview-voice': hanaSay('Hi! I\'m Hana. This is how I sound. Ready to learn?', { force: true }); return;

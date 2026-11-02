@@ -128,7 +128,7 @@ async function speakLine(text, { who = 'hana', mood, lang, speakOnly, caption } 
 async function onAction(a, d) {
   if (a === 'end') return end(true);
   if (a === 'lessonDone') return C.cb.onLessonDone?.(d);
-  if (a === 'chess' || a === 'revise') { const cb = C.cb; await new Promise((r) => setTimeout(r, 600)); end(false); setTimeout(() => cb[a]?.(), 60); }
+  if (a === 'chess' || a === 'revise' || a === 'breathe') { const cb = C.cb; await new Promise((r) => setTimeout(r, 600)); end(false); setTimeout(() => cb[a]?.(), 60); }
 }
 
 // Messages are handled one at a time, so typing fast never makes Hana talk over herself.
