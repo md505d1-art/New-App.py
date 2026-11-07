@@ -9,6 +9,7 @@ import { BIOLOGY, CHEMISTRY, PHYSICS } from './content/gcse-science.js';
 import { MATHS, ENGLISH_LANG, ENGLISH_LIT } from './content/gcse-core.js';
 import { GEOGRAPHY, RS, HISTORY_MORE } from './content/gcse-humanities.js';
 import { MORE } from './content/gcse-other.js';
+import { GCSE_VOCAB, GCSE_VOCAB_UNITS, gcseWordsOf } from './content/gcse-vocab.js';
 
 // Full-specification units, added after each subject's starter units (so existing lesson ids and progress stay the same).
 const tag = (prefix, units) => units.map((u) => ({ ...u, title: `${prefix}: ${u.title}` }));
@@ -258,7 +259,8 @@ function langQuestions(lesson, course) {
 const PALETTE = ['green', 'blue', 'purple', 'red', 'yellow'];
 
 function buildLanguage(lang, idx) {
-  const words = wordsOf(lang);
+  const gcse = GCSE_VOCAB[lang.code]; const gw = gcseWordsOf(lang.code);
+  const words = [...wordsOf(lang), ...gw];
   const course = { id: `lang:${lang.code}`, cat: 'language', name: lang.name, sub: lang.native, flag: lang.flag, icon: 'language',
     color: PALETTE[idx % PALETTE.length], tts: lang.tts, rtl: !!lang.rtl, note: lang.note, words };
   course.units = LANG_UNITS.map((u, ui) => {
@@ -268,6 +270,17 @@ function buildLanguage(lang, idx) {
       lessons: [0, 1].map((li) => ({ id: `${course.id}:${ui}:${li}`, title: `${u.title} ${li + 1}`, words: uw.slice(li * 4, li * 4 + 4),
         phrases: lang.phrases?.[ui] ? [lang.phrases[ui][li]] : [] })) };
   });
+  // GCSE vocabulary themes (French, Spanish, German): open for revision straight away.
+  if (gcse) {
+    GCSE_VOCAB_UNITS.forEach((u, k) => {
+      const ui = LANG_UNITS.length + k; const uw = gw.slice(u.from, u.from + 8);
+      course.units.push({ title: u.title, desc: u.desc, color: u.color,
+        guide: uw.map((w) => ({ term: `${w.emoji} ${w.t}`, def: w.en })),
+        lessons: [0, 1].map((li) => ({ id: `${course.id}:${ui}:${li}`, title: `${u.title.replace('GCSE: ', '')} ${li + 1}`, words: uw.slice(li * 4, li * 4 + 4), open: true,
+          phrases: gcse.phrases?.[k] ? [gcse.phrases[k][li]] : [] })) });
+    });
+    course.note = 'Includes GCSE vocabulary for the AQA themes. Check the full word list for your exam board.';
+  }
   course.questions = (l) => langQuestions(l, course);
   return course;
 }

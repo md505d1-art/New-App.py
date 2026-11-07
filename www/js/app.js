@@ -31,7 +31,7 @@ const lessonsOf = (c) => c.units.flatMap((u, ui) => u.lessons.map((l, li) => ({ 
 const progressOf = (c) => { const ls = lessonsOf(c); const done = ls.filter((l) => S.done[l.id]).length; return { done, total: ls.length, pct: ls.length ? done / ls.length : 0 }; };
 const nextLesson = (c) => lessonsOf(c).find((l) => !S.done[l.id]) || null;
 // School subjects are for revision, so every lesson is open; languages and chess unlock in order.
-const unlocked = (c, id) => { if (c.cat === 'school') return true; const ls = lessonsOf(c); const i = ls.findIndex((x) => x.id === id); return i === 0 || !!S.done[ls[i - 1]?.id]; };
+const unlocked = (c, id) => { if (c.cat === 'school') return true; const ls = lessonsOf(c); const i = ls.findIndex((x) => x.id === id); return i === 0 || !!ls[i]?.open || !!S.done[ls[i - 1]?.id]; };
 const started = () => Object.values(COURSES).filter((c) => progressOf(c).done > 0);
 const starsOf = (id) => +S.done[id] || 0;
 const starRow = (n) => `<span class="stars">${[1, 2, 3].map((k) => `<i class="${k <= n ? 'on' : ''}">★</i>`).join('')}</span>`;
