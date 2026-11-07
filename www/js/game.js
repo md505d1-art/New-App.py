@@ -148,7 +148,7 @@ function draw() {
   const seeds = $('cg-seeds'); const st = `🌱 ${api.seeds()}`; if (seeds.textContent !== st) seeds.textContent = st;
   const myTurn = !G.over && !G.thinking && G.c.turn() === G.side;
   $('g-hint').disabled = !myTurn; $('g-undo').disabled = !(myTurn && G.moves.length >= 2); $('g-resign').disabled = !!G.over;
-  if (G.anim) { slide(G.anim); G.anim = null; }
+  if (G.anim) { slide(G.anim); if (G.anim.castle) slide(G.anim.castle); G.anim = null; }
 }
 
 // Ratings and the eval bar arrive from the analysis worker after the move.
@@ -170,7 +170,15 @@ function slide({ from, to }) {
 function say(mood, html) { G.coach = { mood, html }; }
 
 /* ---------- moves ---------- */
+// Castling chess.com-style: moving the king onto its own rook castles on that side.
+function castleVia(from, to) {
+  const k = G.c.get(from); const r = G.c.get(to);
+  if (!k || k.type !== 'k' || !r || r.type !== 'r' || r.color !== k.color) return null;
+  const side = to[0] > from[0] ? 'k' : 'q';
+  return G.c.moves({ square: from, verbose: true }).find((m) => m.flags.includes(side))?.to || null;
+}
 function tryMove(from, to, promotion) {
+  to = castleVia(from, to) || to;
   const legal = G.c.moves({ square: from, verbose: true }).filter((m) => m.to === to);
   if (!legal.length) { chessSound.illegal(); G.sel = null; G.targets = []; return draw(); }
   if (legal[0].promotion && !promotion) { G.promo = { from, to }; return draw(); }
@@ -181,7 +189,10 @@ function tryMove(from, to, promotion) {
 function afterMove(mv, isUser, animate = true) {
   G.moves.push({ san: mv.san, from: mv.from, to: mv.to, color: mv.color, flags: mv.flags, promotion: mv.promotion });
   G.last = mv; G.sel = null; G.targets = []; G.hint = null; G.promo = null;
-  if (animate) G.anim = { from: mv.from, to: mv.to };
+  if (animate) {
+    const castle = /[kq]/.test(mv.flags) ? { from: `${mv.flags.includes('k') ? 'h' : 'a'}${mv.from[1]}`, to: `${mv.flags.includes('k') ? 'f' : 'd'}${mv.from[1]}` } : null;
+    G.anim = { from: mv.from, to: mv.to, castle };
+  }
   soundFor(mv, G.c.inCheck());
   queueEval(G.moves.length);
   if (G.c.isGameOver()) { draw(); return finishByRules(); }
@@ -282,7 +293,10 @@ document.addEventListener('pointerdown', (e) => {
   const p = G.c.get(sq);
   if (p && p.color === G.side) {
     e.preventDefault();
-    G.sel = sq; G.targets = G.c.moves({ square: sq, verbose: true }).map((m) => m.to);
+    G.sel = sq;
+    const moves = G.c.moves({ square: sq, verbose: true });
+    // castling: the king's two-square move, and its rook (tap or drop the king on the rook to castle)
+    G.targets = [...moves.map((m) => m.to), ...moves.filter((m) => /[kq]/.test(m.flags)).map((m) => `${m.flags.includes('k') ? 'h' : 'a'}${m.from[1]}`)];
     draw();
     const img = document.querySelector(`[data-sq="${sq}"] .cp`);
     drag = { from: sq, x: e.clientX, y: e.clientY, img, ghost: null, size: img?.getBoundingClientRect().width || 40 };

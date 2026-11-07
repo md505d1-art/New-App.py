@@ -5,6 +5,19 @@ import { LANGS, LANG_UNITS, wordsOf } from './content/languages.js';
 import { SUBJECTS } from './content/gcse.js';
 import { SUBJECTS_MORE, GCSE_MFL, CORE_BOARDS } from './content/gcse-more.js';
 import { BSL, SIGNS } from './content/bsl.js';
+import { BIOLOGY, CHEMISTRY, PHYSICS } from './content/gcse-science.js';
+import { MATHS, ENGLISH_LANG, ENGLISH_LIT } from './content/gcse-core.js';
+import { GEOGRAPHY, RS, HISTORY_MORE } from './content/gcse-humanities.js';
+import { MORE } from './content/gcse-other.js';
+
+// Full-specification units, added after each subject's starter units (so existing lesson ids and progress stay the same).
+const tag = (prefix, units) => units.map((u) => ({ ...u, title: `${prefix}: ${u.title}` }));
+const EXTRA = {
+  maths: MATHS, 'english-lang': ENGLISH_LANG, 'english-lit': ENGLISH_LIT,
+  biology: BIOLOGY, chemistry: CHEMISTRY, physics: PHYSICS,
+  'combined-science': [...tag('Biology', BIOLOGY), ...tag('Chemistry', CHEMISTRY), ...tag('Physics', PHYSICS)],
+  geography: GEOGRAPHY, rs: RS, ...MORE,
+};
 export { GCSE_MFL };
 
 const shuffle = (a) => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
@@ -287,6 +300,7 @@ export function toggleQ(terms) {
 }
 
 function buildSubject(s, idx) {
+  s = { ...s, units: [...s.units, ...(EXTRA[s.id] || [])] };
   return { id: `gcse:${s.id}`, cat: 'school', name: s.name, sub: s.sub || 'GCSE', icon: s.icon, glyph: s.glyph, color: s.color, note: s.note,
     boards: s.boards || CORE_BOARDS[s.id] || ['AQA', 'Edexcel', 'Eduqas'],
     units: s.units.map((u, ui) => ({ title: u.title, desc: u.desc, color: PALETTE[(idx + ui) % PALETTE.length],
@@ -329,9 +343,9 @@ function buildBSL() {
 
 /* ---------------- Catalogue ---------------- */
 
-const history = { id: 'history', cat: 'school', name: 'History', sub: 'Cold War · from your notes', icon: 'history', color: 'red', boards: CORE_BOARDS.history,
-  units: buildFacts('cw', CW_UNITS), questions: factsQuestions,
-  note: 'Built from your Cold War Revision Starter note. Check it against your AQA specification.' };
+const history = { id: 'history', cat: 'school', name: 'History', sub: 'Cold War, Germany, Medicine, Elizabethans, WWI, America', icon: 'history', color: 'red', boards: CORE_BOARDS.history,
+  units: buildFacts('cw', [...CW_UNITS, ...HISTORY_MORE]), questions: factsQuestions,
+  note: 'The Cold War units come from your Cold War Revision Starter note. Topics differ by exam board: revise the ones on your specification.' };
 const subjects = [...SUBJECTS, ...SUBJECTS_MORE].map(buildSubject);
 subjects.splice(subjects.findIndex((c) => c.id === 'gcse:geography'), 0, history);
 
